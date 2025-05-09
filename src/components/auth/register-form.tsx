@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,9 +18,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import type { User } from "@/types";
 import { UserRole } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { mockUsers } from '@/lib/mock-data';
 
 
 const formSchema = z.object({
@@ -50,14 +53,32 @@ export function RegisterForm() {
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     // In a real app, you would call an API to register the user.
-    // For this mock, we'll just show a success message.
-    console.log("Registration values:", values);
+    // For this mock, we'll add the user to our mockUsers array.
+    const existingUser = mockUsers.find(u => u.email === values.email);
+    if (existingUser) {
+      toast({
+        title: "Registration Failed",
+        description: "An account with this email already exists.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newUser: User = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: values.name,
+      email: values.email,
+      role: values.role,
+      // Avatar can be a placeholder or generated
+      avatar: `https://picsum.photos/seed/${values.email}/40/40`,
+    };
+
+    mockUsers.push(newUser); // Add the new user to the mock data
+
     toast({
       title: "Registration Successful!",
       description: `User ${values.name} created as a ${values.role}. You can now log in.`,
     });
-    // Potentially add the new user to mockUsers if persisting locally, then redirect
-    // For now, just redirect to login
     router.push('/login');
   }
 
@@ -159,3 +180,4 @@ export function RegisterForm() {
     </Card>
   );
 }
+
