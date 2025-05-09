@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import type { Complaint, User, ComplaintCategory } from '@/types';
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel } from '@/types';
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
 import { mockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
 import {
@@ -133,31 +133,33 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     let newStatus = ComplaintStatus.Escalated;
     // If complaint was resolved and admin escalates, it means resolution was insufficient.
     if (complaint.status === ComplaintStatus.Resolved) {
-        newStatus = ComplaintStatus.Unresolved; // Or directly to Escalated and admin re-assigns
-                                              // Let's keep it simple: Escalate sets status to Escalated
+        // If resolved, escalating implies it wasn't truly resolved to satisfaction
+        // or a new related issue arose requiring higher attention.
+        // The status should clearly reflect it's now an escalated issue.
+        newStatus = ComplaintStatus.Escalated; 
     }
 
 
     const escalatedComplaint: Complaint = {
       ...complaint,
-      status: ComplaintStatus.Escalated, // Always set to Escalated on this action
+      status: newStatus, 
       updatedAt: new Date(),
-      priority: ComplaintPriorityEnum.Critical, 
+      priority: ComplaintPriorityEnum.Escalated, // Set priority to Escalated
       internalNotes: [
         ...(complaint.internalNotes || []),
         { 
           id: `note-escalate-${Date.now()}`, 
           userId: adminUser.id, 
           userName: adminUser.name, 
-          text: 'Complaint escalated by admin. Priority set to Critical.', 
+          text: `Complaint escalated by admin. Priority set to ${ComplaintPriorityEnum.Escalated}.`, 
           timestamp: new Date(), 
           isInternal: true 
         }
       ],
     };
     onUpdateComplaint(escalatedComplaint); 
-    setSelectedPriority(ComplaintPriorityEnum.Critical); 
-    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now Escalated and Critical priority.` });
+    setSelectedPriority(ComplaintPriorityEnum.Escalated); 
+    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriorityEnum.Escalated}.` });
     // Modal remains open for further actions like assignment to a (filtered) higher-level engineer
   };
 
@@ -198,7 +200,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Current Priority:</strong>&nbsp;<Badge variant={complaint.priority === "High" || complaint.priority === "Critical" ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
+                  <div className="flex items-center"><strong>Current Priority:</strong>&nbsp;<Badge variant={(complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -295,10 +297,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         </ScrollArea>
         
         <DialogFooter className="gap-2 sm:gap-0 pt-4">
-          {complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Closed && (
+          {complaint.status !== ComplaintStatus.Closed && ( // Only show escalate if not already closed
             <Button variant="destructive" onClick={handleEscalate} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
               <AlertTriangle className="mr-2 h-4 w-4" />
-              Escalate Complaint
+              {complaint.status === ComplaintStatus.Escalated ? "Re-Escalate/Update" : "Escalate Complaint"}
             </Button>
           )}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
