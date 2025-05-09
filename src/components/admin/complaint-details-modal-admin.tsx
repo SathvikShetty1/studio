@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Complaint, User, ComplaintCategory } from '@/types';
-import { ComplaintStatus, ComplaintPriority } from '@/types';
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types'; // Renamed to avoid conflict
 import { mockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
 import {
@@ -33,8 +33,10 @@ interface ComplaintDetailsModalAdminProps {
   onUpdateComplaint: (updatedComplaint: Complaint) => void;
 }
 
+const UNASSIGNED_VALUE = "_UNASSIGNED_"; // Placeholder for unassigned engineer
+
 export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalAdminProps) {
-  const [selectedPriority, setSelectedPriority] = useState<ComplaintPriority | undefined>(complaint?.priority);
+  const [selectedPriority, setSelectedPriority] = useState<ComplaintPriorityEnum | undefined>(complaint?.priority);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo);
   const [internalNote, setInternalNote] = useState('');
   const [engineers, setEngineers] = useState<User[]>([]);
@@ -43,7 +45,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   useEffect(() => {
     if (complaint) {
       setSelectedPriority(complaint.priority);
-      setSelectedEngineerId(complaint.assignedTo);
+      setSelectedEngineerId(complaint.assignedTo); // This will be undefined if not assigned
     }
     // Load engineers for assignment
     setEngineers(mockUsers.filter(u => u.role === 'engineer'));
@@ -53,9 +55,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
   const handleSave = () => {
     let updatedStatus = complaint.status;
-    if (selectedEngineerId && complaint.status === ComplaintStatus.PendingAssignment) {
-      updatedStatus = ComplaintStatus.Assigned;
-    } else if (selectedEngineerId && complaint.status === ComplaintStatus.Submitted) {
+    const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
+
+    if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted)) {
       updatedStatus = ComplaintStatus.Assigned;
     }
 
@@ -63,8 +65,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     const updatedComplaint: Complaint = {
       ...complaint,
       priority: selectedPriority,
-      assignedTo: selectedEngineerId,
-      assignedToName: selectedEngineerId ? engineers.find(e => e.id === selectedEngineerId)?.name : undefined,
+      assignedTo: finalSelectedEngineerId,
+      assignedToName: finalSelectedEngineerId ? engineers.find(e => e.id === finalSelectedEngineerId)?.name : undefined,
       status: updatedStatus,
       updatedAt: new Date(),
       internalNotes: internalNote ? [
@@ -77,7 +79,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     onClose();
   };
 
-  const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriority }) => {
+  const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriorityEnum }) => {
     setSelectedPriority(suggestion.priority);
     // Potentially update category too if it's editable by admin
     const updatedComplaint: Complaint = {
@@ -90,7 +92,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       updatedAt: new Date(),
     };
     onUpdateComplaint(updatedComplaint); // Update immediately or wait for final save
-    toast({ title: "AI Suggestion Applied", description: `Priority set to ${suggestion.priority}.` });
+    toast({ title: "AI Suggestion Applied", description: `Priority set to ${suggestion.priority}. Category set to ${suggestion.category}.` });
   };
 
 
@@ -114,7 +116,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Status:</strong> <Badge variant="secondary" className="ml-1">{complaint.status}</Badge></div>
+                  <div className="flex items-center"><strong>Status:</strong>&nbsp;<Badge variant="secondary" className="ml-1">{complaint.status}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -151,12 +153,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="priority">Set Priority</Label>
-                    <Select value={selectedPriority} onValueChange={(value) => setSelectedPriority(value as ComplaintPriority)}>
+                    <Select value={selectedPriority} onValueChange={(value) => setSelectedPriority(value as ComplaintPriorityEnum)}>
                       <SelectTrigger id="priority">
                         <SelectValue placeholder="Select priority" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(ComplaintPriority).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        {Object.values(ComplaintPriorityEnum).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -168,7 +170,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                         <SelectValue placeholder="Select engineer" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Unassigned</SelectItem>
+                        <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
                         {engineers.map(eng => <SelectItem key={eng.id} value={eng.id}>{eng.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
