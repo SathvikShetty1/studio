@@ -30,6 +30,12 @@ interface ComplaintDetailsModalEngineerProps {
   onUpdateComplaint: (updatedComplaint: Complaint) => void;
 }
 
+const engineerAllowedStatuses: ComplaintStatus[] = [
+  ComplaintStatus.InProgress,
+  ComplaintStatus.Resolved,
+  ComplaintStatus.Unresolved,
+];
+
 export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalEngineerProps) {
   const [selectedStatus, setSelectedStatus] = useState<ComplaintStatus | undefined>(complaint?.status);
   const [resolutionDetails, setResolutionDetails] = useState(complaint?.resolutionDetails || '');
@@ -45,7 +51,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
 
   if (!complaint) return null;
 
-  const isTerminalStatus = complaint.status === ComplaintStatus.Resolved || complaint.status === ComplaintStatus.Closed;
+  const isTerminalStatus = [ComplaintStatus.Resolved, ComplaintStatus.Closed, ComplaintStatus.Escalated].includes(complaint.status);
 
   const handleSave = () => {
     let updatedResolvedAt: Date | undefined = complaint.resolvedAt;
@@ -89,7 +95,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <p><strong>Priority:</strong> <Badge variant="secondary">{complaint.priority}</Badge></p>
+                  <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === "High" || complaint.priority === "Critical" ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -137,7 +143,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(ComplaintStatus).filter(s => s !== ComplaintStatus.Submitted && s !== ComplaintStatus.PendingAssignment).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        {engineerAllowedStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -176,4 +182,3 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     </Dialog>
   );
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { mockComplaints as initialMockComplaints } from '@/lib/mock-data';
 import { ComplaintTableAdmin } from '@/components/admin/complaint-table-admin';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, ListChecks, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ListChecks, Users, ChevronsUp } from 'lucide-react'; // Added ChevronsUp for Escalated
 import { ComplaintStatus } from '@/types';
 
 export default function AdminDashboardPage() {
@@ -15,38 +16,56 @@ export default function AdminDashboardPage() {
   // Initialize with a copy of the current state of initialMockComplaints
   const [allComplaints, setAllComplaints] = useState<Complaint[]>(() => [...initialMockComplaints]);
 
-  // Effect to update `allComplaints` if the source array's length changes (e.g., new complaint added)
+  // Effect to update `allComplaints` if the source array's content (any complaint object) changes,
+  // or if its length changes (e.g., new complaint added/deleted).
   useEffect(() => {
+    // This creates a shallow copy. If mockComplaints objects are mutated directly elsewhere,
+    // this might not pick up changes if the array reference itself or length doesn't change.
+    // A more robust way would be to deep compare or use a version/timestamp if objects are complex.
+    // For this mock setup, we assume mockComplaints array itself is the source of truth that gets modified.
     setAllComplaints([...initialMockComplaints]);
-  }, [initialMockComplaints.length]); // React to additions/deletions
+  }, [initialMockComplaints, initialMockComplaints.length]); // React to additions/deletions and content changes if the array reference changes
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
-    setAllComplaints(prevComplaints =>
-      prevComplaints.map(c => (c.id === updatedComplaint.id ? updatedComplaint : c))
-    );
-    // Update the global mock data as well
+    // Update the global mock data first
     const index = initialMockComplaints.findIndex(c => c.id === updatedComplaint.id);
     if (index !== -1) {
       initialMockComplaints[index] = updatedComplaint;
+      // Trigger re-render by creating a new array reference for state
+      setAllComplaints([...initialMockComplaints]);
+    } else {
+      // If somehow the complaint is new (should not happen via this handler)
+      initialMockComplaints.unshift(updatedComplaint);
+      setAllComplaints([...initialMockComplaints]);
     }
   };
 
   const handleDeleteComplaint = (complaintId: string) => {
-    const newComplaints = initialMockComplaints.filter(c => c.id !== complaintId)
-    // Update global mock data first
+    const newComplaintsList = initialMockComplaints.filter(c => c.id !== complaintId)
+    // Update global mock data first by replacing its contents
     initialMockComplaints.length = 0; // Clear array
-    initialMockComplaints.push(...newComplaints); // Repopulate with filtered complaints
+    initialMockComplaints.push(...newComplaintsList); // Repopulate
     
-    // Then update local state, which will trigger re-render if useEffect for length change doesn't catch it fast enough
-    // or if this is the primary action source.
-    setAllComplaints([...initialMockComplaints]);
+    setAllComplaints([...initialMockComplaints]); // Update local state
   };
   
   const stats = {
     total: allComplaints.length,
-    pending: allComplaints.filter(c => c.status === ComplaintStatus.Submitted || c.status === ComplaintStatus.PendingAssignment).length,
-    inProgress: allComplaints.filter(c => c.status === ComplaintStatus.InProgress || c.status === ComplaintStatus.Assigned).length,
-    resolved: allComplaints.filter(c => c.status === ComplaintStatus.Resolved || c.status === ComplaintStatus.Closed).length,
+    pending: allComplaints.filter(c => 
+        c.status === ComplaintStatus.Submitted || 
+        c.status === ComplaintStatus.PendingAssignment ||
+        c.status === ComplaintStatus.Unresolved
+    ).length,
+    inProgress: allComplaints.filter(c => 
+        c.status === ComplaintStatus.InProgress || 
+        c.status === ComplaintStatus.Assigned ||
+        c.status === ComplaintStatus.Escalated
+    ).length,
+    resolved: allComplaints.filter(c => 
+        c.status === ComplaintStatus.Resolved || 
+        c.status === ComplaintStatus.Closed
+    ).length,
+    escalated: allComplaints.filter(c => c.status === ComplaintStatus.Escalated).length,
   };
 
 
@@ -99,6 +118,17 @@ export default function AdminDashboardPage() {
             <div className="text-2xl font-bold">{stats.resolved}</div>
           </CardContent>
         </Card>
+         {stats.escalated > 0 && (
+          <Card className="border-destructive">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-destructive">Escalated</CardTitle>
+              <ChevronsUp className="h-4 w-4 text-destructive" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-destructive">{stats.escalated}</div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Separator />

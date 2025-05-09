@@ -17,6 +17,7 @@ export enum ComplaintStatus {
   PendingAssignment = 'Pending Assignment',
   Assigned = 'Assigned',
   Resolved = 'Resolved',
+  Unresolved = 'Unresolved', // Added
   Closed = 'Closed',
   Escalated = 'Escalated',
 }

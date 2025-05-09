@@ -21,9 +21,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AITriageSection } from './ai-triage-section';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { Paperclip } from 'lucide-react';
+import { Paperclip, AlertTriangle } from 'lucide-react'; // Added AlertTriangle for Escalate button
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from '@/hooks/use-auth';
 
 
 interface ComplaintDetailsModalAdminProps {
@@ -36,8 +37,9 @@ interface ComplaintDetailsModalAdminProps {
 const UNASSIGNED_VALUE = "_UNASSIGNED_"; // Placeholder for unassigned engineer
 
 export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalAdminProps) {
+  const { user: adminUser } = useAuth(); // Get current admin user for notes
   const [selectedPriority, setSelectedPriority] = useState<ComplaintPriorityEnum | undefined>(complaint?.priority);
-  const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo);
+  const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo || UNASSIGNED_VALUE);
   const [internalNote, setInternalNote] = useState('');
   const [engineers, setEngineers] = useState<User[]>([]);
   const { toast } = useToast();
@@ -45,7 +47,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   useEffect(() => {
     if (complaint) {
       setSelectedPriority(complaint.priority);
-      setSelectedEngineerId(complaint.assignedTo); // This will be undefined if not assigned
+      setSelectedEngineerId(complaint.assignedTo || UNASSIGNED_VALUE);
+      setInternalNote(''); // Clear note on new complaint
     }
     // Load engineers for assignment
     setEngineers(mockUsers.filter(u => u.role === 'engineer'));
@@ -59,6 +62,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
     if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted)) {
       updatedStatus = ComplaintStatus.Assigned;
+    } else if (finalSelectedEngineerId && complaint.status === ComplaintStatus.Unresolved) {
+      // If admin assigns an unresolved complaint, it moves to Assigned.
+      // If it was escalated first, it should stay Escalated and assigned.
+      // This logic assumes escalation is a separate action.
+      // If an admin is just assigning an Unresolved complaint, it becomes Assigned.
+      if(updatedStatus !== ComplaintStatus.Escalated) { // Don't override if it was just escalated
+         updatedStatus = ComplaintStatus.Assigned;
+      }
     }
 
 
@@ -67,31 +78,69 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       priority: selectedPriority,
       assignedTo: finalSelectedEngineerId,
       assignedToName: finalSelectedEngineerId ? engineers.find(e => e.id === finalSelectedEngineerId)?.name : undefined,
-      status: updatedStatus,
+      status: updatedStatus, // Status might have been changed by escalation OR by assignment here
       updatedAt: new Date(),
       internalNotes: internalNote ? [
         ...(complaint.internalNotes || []),
-        { id: `note-${Date.now()}`, userId: 'user-admin1', userName: 'Current Admin', text: internalNote, timestamp: new Date(), isInternal: true }
+        { 
+          id: `note-${Date.now()}`, 
+          userId: adminUser?.id || 'unknown-admin', 
+          userName: adminUser?.name || 'Admin', 
+          text: internalNote, 
+          timestamp: new Date(), 
+          isInternal: true 
+        }
       ] : complaint.internalNotes,
     };
     onUpdateComplaint(updatedComplaint);
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
     onClose();
   };
+  
+  const handleEscalate = () => {
+    if (!complaint || !adminUser) return;
+
+    const escalatedComplaint: Complaint = {
+      ...complaint,
+      status: ComplaintStatus.Escalated,
+      updatedAt: new Date(),
+      priority: ComplaintPriorityEnum.Critical, // Escalated complaints become Critical
+      internalNotes: [
+        ...(complaint.internalNotes || []),
+        { 
+          id: `note-escalate-${Date.now()}`, 
+          userId: adminUser.id, 
+          userName: adminUser.name, 
+          text: 'Complaint escalated by admin.', 
+          timestamp: new Date(), 
+          isInternal: true 
+        }
+      ],
+    };
+    onUpdateComplaint(escalatedComplaint); // This will update the complaint prop in the modal via parent state
+    setSelectedPriority(ComplaintPriorityEnum.Critical); // Reflect priority change in UI
+    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} has been escalated to Critical priority.` });
+    // Modal remains open for further actions like assignment
+  };
+
 
   const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriorityEnum }) => {
     setSelectedPriority(suggestion.priority);
     // Potentially update category too if it's editable by admin
-    const updatedComplaint: Complaint = {
+    // For now, AI suggestion primarily affects priority and category locally before save.
+    // The save action will persist it.
+    // We can also directly update the complaint object if AI suggestions should be immediately "harder" set.
+    // Let's update the complaint for AI reasoning logging
+     const updatedComplaintWithAI: Complaint = {
       ...complaint,
-      category: suggestion.category, // Example: Admin accepts AI category
+      category: suggestion.category, 
       priority: suggestion.priority,
       aiSuggestedCategory: suggestion.category,
       aiSuggestedPriority: suggestion.priority,
-      aiReasoning: 'AI suggestion applied by admin.', // Simplified reasoning log
+      aiReasoning: 'AI suggestion applied by admin.', 
       updatedAt: new Date(),
     };
-    onUpdateComplaint(updatedComplaint); // Update immediately or wait for final save
+    onUpdateComplaint(updatedComplaintWithAI); // Persist AI reasoning and suggestions
     toast({ title: "AI Suggestion Applied", description: `Priority set to ${suggestion.priority}. Category set to ${suggestion.category}.` });
   };
 
@@ -102,7 +151,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         <DialogHeader>
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
           <DialogDescription>
-            Manage complaint priority, assignment, and add internal notes.
+            Manage complaint priority, assignment, and add internal notes. Current status: <Badge variant="outline">{complaint.status}</Badge>
           </DialogDescription>
         </DialogHeader>
         
@@ -116,7 +165,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Status:</strong>&nbsp;<Badge variant="secondary" className="ml-1">{complaint.status}</Badge></div>
+                  <div className="flex items-center"><strong>Current Priority:</strong>&nbsp;<Badge variant={complaint.priority === "High" || complaint.priority === "Critical" ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -206,7 +255,13 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </div>
         </ScrollArea>
         
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
+          {complaint.status === ComplaintStatus.Unresolved && (
+            <Button variant="destructive" onClick={handleEscalate}>
+              <AlertTriangle className="mr-2 h-4 w-4" />
+              Escalate Complaint
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave}>Save Changes</Button>
         </DialogFooter>
