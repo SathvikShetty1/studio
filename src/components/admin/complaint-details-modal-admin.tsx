@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -22,6 +23,8 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+
 
 interface ComplaintDetailsModalAdminProps {
   complaint: Complaint | null;
