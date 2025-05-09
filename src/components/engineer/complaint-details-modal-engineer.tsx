@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Complaint, ComplaintNote, User } from '@/types';
-import { ComplaintStatus } from '@/types';
+import type { Complaint } from '@/types';
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,11 +30,10 @@ interface ComplaintDetailsModalEngineerProps {
   onUpdateComplaint: (updatedComplaint: Complaint) => void;
 }
 
-// Engineer can only set these statuses
 const engineerAllowedStatuses: ComplaintStatus[] = [
   ComplaintStatus.InProgress,
   ComplaintStatus.Resolved,
-  ComplaintStatus.Unresolved,
+  ComplaintStatus.Unresolved, 
 ];
 
 export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalEngineerProps) {
@@ -48,15 +47,14 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     if (complaint) {
       setSelectedStatus(complaint.status);
       setResolutionDetails(complaint.resolutionDetails || '');
-      setInternalNote(''); // Clear note on new complaint
+      setInternalNote(''); 
     }
   }, [complaint]);
 
   if (!complaint) return null;
 
-  // These statuses are considered terminal from an engineer's perspective for editing.
-  // Once Closed or Escalated by admin, engineer typically cannot change them further from this modal.
-  const isTerminalStatusForEngineer = [ComplaintStatus.Closed, ComplaintStatus.Escalated].includes(complaint.status);
+  const isTerminalStatusForEngineer = [ComplaintStatus.Closed, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Submitted].includes(complaint.status);
+
 
   const handleSave = () => {
     if (!engineerUser) {
@@ -67,12 +65,15 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     let updatedResolvedAt: Date | undefined = complaint.resolvedAt;
     if (selectedStatus === ComplaintStatus.Resolved && complaint.status !== ComplaintStatus.Resolved) {
       updatedResolvedAt = new Date();
+    } else if (selectedStatus !== ComplaintStatus.Resolved) {
+      // Clear resolvedAt if status is changed from Resolved to something else
+      updatedResolvedAt = undefined;
     }
     
     const updatedComplaint: Complaint = {
       ...complaint,
       status: selectedStatus || complaint.status,
-      resolutionDetails: resolutionDetails, // This field can be used for 'unresolution' notes too if status is Unresolved
+      resolutionDetails: resolutionDetails, 
       resolvedAt: updatedResolvedAt,
       updatedAt: new Date(),
       internalNotes: internalNote ? [
@@ -111,7 +112,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === "High" || complaint.priority === "Critical" ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
+                  <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -162,14 +163,18 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Show current status if it's not in allowed list but is the current one */}
+                        {/* Show current status if it's not in allowed list but is the current one and not terminal */}
                         {complaint.status && !engineerAllowedStatuses.includes(complaint.status) && !isTerminalStatusForEngineer && (
                              <SelectItem value={complaint.status} disabled>{complaint.status} (Current)</SelectItem>
                         )}
-                        {engineerAllowedStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                         {/* Always show the current status if it is terminal, but disabled */}
+                        {isTerminalStatusForEngineer && complaint.status && (
+                            <SelectItem value={complaint.status} disabled>{complaint.status} (Current - Locked)</SelectItem>
+                        )}
+                        {engineerAllowedStatuses.map(s => <SelectItem key={s} value={s} disabled={isTerminalStatusForEngineer && s !== complaint.status}>{s}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {isTerminalStatusForEngineer && <p className="text-xs text-muted-foreground mt-1">Status is terminal ({complaint.status}) and cannot be changed by engineer.</p>}
+                    {isTerminalStatusForEngineer && <p className="text-xs text-muted-foreground mt-1">Status is ({complaint.status}) and cannot be changed by engineer at this stage.</p>}
                   </div>
                   <div>
                     <Label htmlFor="resolution-details">
@@ -212,3 +217,4 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     </Dialog>
   );
 }
+

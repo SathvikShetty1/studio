@@ -61,27 +61,20 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             displayEngineers = allEngineers.filter(eng => 
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
-          } else { // Current assignee is Executive
-             // Show other executives or an empty list if no other executives
+          } else { 
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
             if (displayEngineers.length === 0) {
-                 // If current is exec and no other execs, maybe show all for admin to decide, or current exec again
-                 // For now, let's show all execs if current is exec. If only one, list is empty.
-                 // This path implies admin might need to re-assign to same exec if no higher.
-                 // Let's show current executive again if they are the only one.
                 const otherExecutives = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
                 if (otherExecutives.length > 0) {
                     displayEngineers = otherExecutives;
                 } else {
-                    // if current is the only executive, show them, or an empty list
-                    // for now, let's ensure the dropdown is not entirely empty if there's at least one exec
                     displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
                 }
             }
           }
         }
       }
-      setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers); // Fallback to all engineers if filter yields empty
+      setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers); 
     } else {
       setEngineersForAssignment(allEngineers);
     }
@@ -97,8 +90,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
     if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted || complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated)) {
       updatedStatus = ComplaintStatus.Assigned;
-       // If it was Escalated, and now assigned, it becomes 'Assigned' but keeps high priority
-       // If it was Unresolved and assigned, it becomes 'Assigned'.
     }
 
 
@@ -131,11 +122,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     if (!complaint || !adminUser) return;
 
     let newStatus = ComplaintStatus.Escalated;
-    // If complaint was resolved and admin escalates, it means resolution was insufficient.
     if (complaint.status === ComplaintStatus.Resolved) {
-        // If resolved, escalating implies it wasn't truly resolved to satisfaction
-        // or a new related issue arose requiring higher attention.
-        // The status should clearly reflect it's now an escalated issue.
         newStatus = ComplaintStatus.Escalated; 
     }
 
@@ -144,7 +131,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       ...complaint,
       status: newStatus, 
       updatedAt: new Date(),
-      priority: ComplaintPriorityEnum.Escalated, // Set priority to Escalated
+      priority: ComplaintPriorityEnum.Escalated, 
       internalNotes: [
         ...(complaint.internalNotes || []),
         { 
@@ -160,11 +147,11 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     onUpdateComplaint(escalatedComplaint); 
     setSelectedPriority(ComplaintPriorityEnum.Escalated); 
     toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriorityEnum.Escalated}.` });
-    // Modal remains open for further actions like assignment to a (filtered) higher-level engineer
   };
 
   const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriorityEnum }) => {
     setSelectedPriority(suggestion.priority);
+    // Category update is handled by onUpdateComplaint if needed, here we only set priority from AI
     const updatedComplaintWithAI: Complaint = {
       ...complaint,
       category: suggestion.category, 
@@ -297,7 +284,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         </ScrollArea>
         
         <DialogFooter className="gap-2 sm:gap-0 pt-4">
-          {complaint.status !== ComplaintStatus.Closed && ( // Only show escalate if not already closed
+          {complaint.status !== ComplaintStatus.Closed && ( 
             <Button variant="destructive" onClick={handleEscalate} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
               <AlertTriangle className="mr-2 h-4 w-4" />
               {complaint.status === ComplaintStatus.Escalated ? "Re-Escalate/Update" : "Escalate Complaint"}
@@ -310,3 +297,4 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
+

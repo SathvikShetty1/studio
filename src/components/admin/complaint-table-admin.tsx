@@ -13,7 +13,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Edit2, Trash2, Filter } from "lucide-react";
+import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Trash2, Filter } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,8 +36,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Complaint, ComplaintPriority } from "@/types"; // Removed ComplaintStatus from here as it's imported below
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types"; // Import ComplaintStatus and aliased ComplaintPriority
+import type { Complaint, ComplaintPriority } from "@/types"; 
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types";
 import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -127,7 +127,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
       header: "Priority",
       cell: ({ row }) => {
         const priority = row.getValue("priority") as ComplaintPriority | undefined;
-        return priority ? <Badge variant={priority === ComplaintPriorityEnum.Critical || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
+        return priority ? <Badge variant={priority === ComplaintPriorityEnum.Escalated || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
       },
       filterFn: (row, id, value) => {
         return value.includes(row.getValue(id))

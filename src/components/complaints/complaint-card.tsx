@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, Tag, MessageSquare, AlertTriangle, CheckCircle, User, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { ComplaintPriority as ComplaintPriorityEnum } from '@/types';
+
 
 interface ComplaintCardProps {
   complaint: Complaint;
@@ -21,22 +23,22 @@ const getStatusColor = (status: string) => {
     case 'Resolved':
     case 'Closed':
       return 'bg-green-500 hover:bg-green-600';
-    case 'Escalated':
+    case 'Escalated': // Status
       return 'bg-red-500 hover:bg-red-600';
     default:
       return 'bg-gray-500 hover:bg-gray-600';
   }
 };
 
-const getPriorityColor = (priority?: string) => {
+const getPriorityColor = (priority?: ComplaintPriorityEnum) => {
   switch (priority) {
-    case 'Low':
+    case ComplaintPriorityEnum.Low:
       return 'bg-green-100 text-green-800 border-green-300';
-    case 'Medium':
+    case ComplaintPriorityEnum.Medium:
       return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    case 'High':
+    case ComplaintPriorityEnum.High:
       return 'bg-orange-100 text-orange-800 border-orange-300';
-    case 'Critical':
+    case ComplaintPriorityEnum.Escalated: // Priority (formerly Critical)
       return 'bg-red-100 text-red-800 border-red-300';
     default:
       return 'bg-gray-100 text-gray-800 border-gray-300';
@@ -92,3 +94,4 @@ export function ComplaintCard({ complaint, onClick }: ComplaintCardProps) {
     </Card>
   );
 }
+

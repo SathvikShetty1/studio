@@ -10,7 +10,7 @@ export enum ComplaintPriority {
   Low = 'Low',
   Medium = 'Medium',
   High = 'High',
-  Critical = 'Critical',
+  Escalated = 'Escalated', // Changed from Critical to Escalated
 }
 
 export enum ComplaintStatus {
@@ -66,3 +66,4 @@ export interface Complaint {
   aiSuggestedPriority?: ComplaintPriority;
   aiReasoning?: string;
 }
+

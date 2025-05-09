@@ -36,8 +36,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Complaint, ComplaintPriority } from "@/types"; // Removed ComplaintStatus from here
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types"; // Import ComplaintStatus and aliased ComplaintPriority
+import type { Complaint, ComplaintPriority } from "@/types"; 
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types"; 
 import { ComplaintDetailsModalEngineer } from "./complaint-details-modal-engineer";
 import { format } from "date-fns";
 
@@ -118,7 +118,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
       header: "Priority",
       cell: ({ row }) => {
         const priority = row.getValue("priority") as ComplaintPriority | undefined;
-        return priority ? <Badge variant={priority === ComplaintPriorityEnum.Critical || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
+        return priority ? <Badge variant={priority === ComplaintPriorityEnum.Escalated || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
       },
        filterFn: (row, id, value) => {
         return value.includes(row.getValue(id))
