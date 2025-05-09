@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import type { User } from "@/types";
-import { UserRole } from "@/types";
+import { UserRole, EngineerLevel } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { mockUsers } from '@/lib/mock-data';
@@ -31,9 +30,13 @@ const formSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   confirmPassword: z.string().min(6, { message: "Password must be at least 6 characters." }),
   role: z.nativeEnum(UserRole).default(UserRole.Customer),
+  engineerLevel: z.nativeEnum(EngineerLevel).optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
+}).refine(data => data.role !== UserRole.Engineer || (data.role === UserRole.Engineer && !!data.engineerLevel), {
+  message: "Engineer level is required for engineer role.",
+  path: ["engineerLevel"],
 });
 
 export function RegisterForm() {
@@ -51,9 +54,9 @@ export function RegisterForm() {
     },
   });
 
+  const selectedRole = form.watch("role");
+
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real app, you would call an API to register the user.
-    // For this mock, we'll add the user to our mockUsers array.
     const existingUser = mockUsers.find(u => u.email === values.email);
     if (existingUser) {
       toast({
@@ -69,15 +72,17 @@ export function RegisterForm() {
       name: values.name,
       email: values.email,
       role: values.role,
-      // Avatar can be a placeholder or generated
       avatar: `https://picsum.photos/seed/${values.email}/40/40`,
+      ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
     };
 
-    mockUsers.push(newUser); // Add the new user to the mock data
+    // Directly mutate the imported mockUsers array
+    const usersStore = require('@/lib/mock-data').mockUsers;
+    usersStore.push(newUser);
 
     toast({
       title: "Registration Successful!",
-      description: `User ${values.name} created as a ${values.role}. You can now log in.`,
+      description: `User ${values.name} created as a ${values.role}${values.role === UserRole.Engineer ? ` (${values.engineerLevel})` : ''}. You can now log in.`,
     });
     router.push('/login');
   }
@@ -165,6 +170,30 @@ export function RegisterForm() {
                 </FormItem>
               )}
             />
+            {selectedRole === UserRole.Engineer && (
+              <FormField
+                control={form.control}
+                name="engineerLevel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Engineer Level</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select engineer level" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.values(EngineerLevel).map(level => (
+                          <SelectItem key={level} value={level}>{level}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <Button type="submit" className="w-full">Register</Button>
           </form>
         </Form>
@@ -180,4 +209,3 @@ export function RegisterForm() {
     </Card>
   );
 }
-

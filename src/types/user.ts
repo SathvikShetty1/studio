@@ -4,10 +4,17 @@ export enum UserRole {
   Engineer = 'engineer',
 }
 
+export enum EngineerLevel {
+  Junior = 'Junior',
+  Senior = 'Senior',
+  Executive = 'Executive',
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
   avatar?: string; // URL to avatar image
+  engineerLevel?: EngineerLevel;
 }

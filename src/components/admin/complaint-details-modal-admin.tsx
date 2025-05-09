@@ -1,9 +1,8 @@
-
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Complaint, User, ComplaintCategory } from '@/types';
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types'; // Renamed to avoid conflict
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel } from '@/types';
 import { mockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +20,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AITriageSection } from './ai-triage-section';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { Paperclip, AlertTriangle } from 'lucide-react'; // Added AlertTriangle for Escalate button
+import { Paperclip, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from '@/hooks/use-auth';
-
 
 interface ComplaintDetailsModalAdminProps {
   complaint: Complaint | null;
@@ -34,42 +32,73 @@ interface ComplaintDetailsModalAdminProps {
   onUpdateComplaint: (updatedComplaint: Complaint) => void;
 }
 
-const UNASSIGNED_VALUE = "_UNASSIGNED_"; // Placeholder for unassigned engineer
+const UNASSIGNED_VALUE = "_UNASSIGNED_";
+const engineerLevelOrder: EngineerLevel[] = [EngineerLevel.Junior, EngineerLevel.Senior, EngineerLevel.Executive];
 
 export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalAdminProps) {
-  const { user: adminUser } = useAuth(); // Get current admin user for notes
+  const { user: adminUser } = useAuth();
   const [selectedPriority, setSelectedPriority] = useState<ComplaintPriorityEnum | undefined>(complaint?.priority);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo || UNASSIGNED_VALUE);
   const [internalNote, setInternalNote] = useState('');
-  const [engineers, setEngineers] = useState<User[]>([]);
   const { toast } = useToast();
+
+  const allEngineers = useMemo(() => mockUsers.filter(u => u.role === UserRole.Engineer), []);
+
+  const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>(allEngineers);
 
   useEffect(() => {
     if (complaint) {
       setSelectedPriority(complaint.priority);
       setSelectedEngineerId(complaint.assignedTo || UNASSIGNED_VALUE);
-      setInternalNote(''); // Clear note on new complaint
+      setInternalNote('');
+
+      let displayEngineers = [...allEngineers];
+      if ((complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo) {
+        const currentAssignee = mockUsers.find(u => u.id === complaint.assignedTo);
+        if (currentAssignee && currentAssignee.role === UserRole.Engineer && currentAssignee.engineerLevel) {
+          const currentLevelIndex = engineerLevelOrder.indexOf(currentAssignee.engineerLevel);
+          if (currentLevelIndex < engineerLevelOrder.length - 1) { // Not already at highest level
+            displayEngineers = allEngineers.filter(eng => 
+              eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
+            );
+          } else { // Current assignee is Executive
+             // Show other executives or an empty list if no other executives
+            displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
+            if (displayEngineers.length === 0) {
+                 // If current is exec and no other execs, maybe show all for admin to decide, or current exec again
+                 // For now, let's show all execs if current is exec. If only one, list is empty.
+                 // This path implies admin might need to re-assign to same exec if no higher.
+                 // Let's show current executive again if they are the only one.
+                const otherExecutives = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
+                if (otherExecutives.length > 0) {
+                    displayEngineers = otherExecutives;
+                } else {
+                    // if current is the only executive, show them, or an empty list
+                    // for now, let's ensure the dropdown is not entirely empty if there's at least one exec
+                    displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
+                }
+            }
+          }
+        }
+      }
+      setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers); // Fallback to all engineers if filter yields empty
+    } else {
+      setEngineersForAssignment(allEngineers);
     }
-    // Load engineers for assignment
-    setEngineers(mockUsers.filter(u => u.role === 'engineer'));
-  }, [complaint]);
+  }, [complaint, allEngineers]);
+
 
   if (!complaint) return null;
 
   const handleSave = () => {
     let updatedStatus = complaint.status;
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
+    const assignedEngineer = finalSelectedEngineerId ? mockUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
 
-    if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted)) {
+    if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted || complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated)) {
       updatedStatus = ComplaintStatus.Assigned;
-    } else if (finalSelectedEngineerId && complaint.status === ComplaintStatus.Unresolved) {
-      // If admin assigns an unresolved complaint, it moves to Assigned.
-      // If it was escalated first, it should stay Escalated and assigned.
-      // This logic assumes escalation is a separate action.
-      // If an admin is just assigning an Unresolved complaint, it becomes Assigned.
-      if(updatedStatus !== ComplaintStatus.Escalated) { // Don't override if it was just escalated
-         updatedStatus = ComplaintStatus.Assigned;
-      }
+       // If it was Escalated, and now assigned, it becomes 'Assigned' but keeps high priority
+       // If it was Unresolved and assigned, it becomes 'Assigned'.
     }
 
 
@@ -77,8 +106,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       ...complaint,
       priority: selectedPriority,
       assignedTo: finalSelectedEngineerId,
-      assignedToName: finalSelectedEngineerId ? engineers.find(e => e.id === finalSelectedEngineerId)?.name : undefined,
-      status: updatedStatus, // Status might have been changed by escalation OR by assignment here
+      assignedToName: assignedEngineer?.name,
+      currentHandlerLevel: assignedEngineer?.engineerLevel,
+      status: updatedStatus,
       updatedAt: new Date(),
       internalNotes: internalNote ? [
         ...(complaint.internalNotes || []),
@@ -100,38 +130,40 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   const handleEscalate = () => {
     if (!complaint || !adminUser) return;
 
+    let newStatus = ComplaintStatus.Escalated;
+    // If complaint was resolved and admin escalates, it means resolution was insufficient.
+    if (complaint.status === ComplaintStatus.Resolved) {
+        newStatus = ComplaintStatus.Unresolved; // Or directly to Escalated and admin re-assigns
+                                              // Let's keep it simple: Escalate sets status to Escalated
+    }
+
+
     const escalatedComplaint: Complaint = {
       ...complaint,
-      status: ComplaintStatus.Escalated,
+      status: ComplaintStatus.Escalated, // Always set to Escalated on this action
       updatedAt: new Date(),
-      priority: ComplaintPriorityEnum.Critical, // Escalated complaints become Critical
+      priority: ComplaintPriorityEnum.Critical, 
       internalNotes: [
         ...(complaint.internalNotes || []),
         { 
           id: `note-escalate-${Date.now()}`, 
           userId: adminUser.id, 
           userName: adminUser.name, 
-          text: 'Complaint escalated by admin.', 
+          text: 'Complaint escalated by admin. Priority set to Critical.', 
           timestamp: new Date(), 
           isInternal: true 
         }
       ],
     };
-    onUpdateComplaint(escalatedComplaint); // This will update the complaint prop in the modal via parent state
-    setSelectedPriority(ComplaintPriorityEnum.Critical); // Reflect priority change in UI
-    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} has been escalated to Critical priority.` });
-    // Modal remains open for further actions like assignment
+    onUpdateComplaint(escalatedComplaint); 
+    setSelectedPriority(ComplaintPriorityEnum.Critical); 
+    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now Escalated and Critical priority.` });
+    // Modal remains open for further actions like assignment to a (filtered) higher-level engineer
   };
-
 
   const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriorityEnum }) => {
     setSelectedPriority(suggestion.priority);
-    // Potentially update category too if it's editable by admin
-    // For now, AI suggestion primarily affects priority and category locally before save.
-    // The save action will persist it.
-    // We can also directly update the complaint object if AI suggestions should be immediately "harder" set.
-    // Let's update the complaint for AI reasoning logging
-     const updatedComplaintWithAI: Complaint = {
+    const updatedComplaintWithAI: Complaint = {
       ...complaint,
       category: suggestion.category, 
       priority: suggestion.priority,
@@ -140,10 +172,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       aiReasoning: 'AI suggestion applied by admin.', 
       updatedAt: new Date(),
     };
-    onUpdateComplaint(updatedComplaintWithAI); // Persist AI reasoning and suggestions
+    onUpdateComplaint(updatedComplaintWithAI);
     toast({ title: "AI Suggestion Applied", description: `Priority set to ${suggestion.priority}. Category set to ${suggestion.category}.` });
   };
-
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -152,12 +183,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
           <DialogDescription>
             Manage complaint priority, assignment, and add internal notes. Current status: <Badge variant="outline">{complaint.status}</Badge>
+            {complaint.assignedToName && complaint.currentHandlerLevel && (
+              <span className="text-xs"> (Handler: {complaint.assignedToName} - {complaint.currentHandlerLevel})</span>
+            )}
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow pr-6 -mr-6"> {/* pr-6 -mr-6 to give space for scrollbar if content overflows */}
+        <ScrollArea className="flex-grow pr-6 -mr-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            {/* Left Column: Complaint Info & AI Triage */}
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -195,7 +228,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               />
             </div>
 
-            {/* Right Column: Admin Actions */}
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Admin Actions</CardTitle></CardHeader>
@@ -220,9 +252,16 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                        {engineers.map(eng => <SelectItem key={eng.id} value={eng.id}>{eng.name}</SelectItem>)}
+                        {engineersForAssignment.length > 0 ? (
+                            engineersForAssignment.map(eng => <SelectItem key={eng.id} value={eng.id}>{eng.name} ({eng.engineerLevel})</SelectItem>)
+                        ) : (
+                            <SelectItem value="no_eligible_engineers" disabled>No eligible higher-level engineers</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
+                    {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && engineersForAssignment.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for escalation based on current assignment.</p>
+                    )}
                   </div>
                   
                   <div>
@@ -255,9 +294,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </div>
         </ScrollArea>
         
-        <DialogFooter className="gap-2 sm:gap-0">
-          {complaint.status === ComplaintStatus.Unresolved && (
-            <Button variant="destructive" onClick={handleEscalate}>
+        <DialogFooter className="gap-2 sm:gap-0 pt-4">
+          {complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Closed && (
+            <Button variant="destructive" onClick={handleEscalate} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
               <AlertTriangle className="mr-2 h-4 w-4" />
               Escalate Complaint
             </Button>

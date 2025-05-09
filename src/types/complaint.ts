@@ -1,3 +1,5 @@
+import type { EngineerLevel } from './user';
+
 export enum ComplaintCategory {
   Product = 'Product',
   Service = 'Service',
@@ -17,7 +19,7 @@ export enum ComplaintStatus {
   PendingAssignment = 'Pending Assignment',
   Assigned = 'Assigned',
   Resolved = 'Resolved',
-  Unresolved = 'Unresolved', // Added
+  Unresolved = 'Unresolved',
   Closed = 'Closed',
   Escalated = 'Escalated',
 }
@@ -51,6 +53,7 @@ export interface Complaint {
   priority?: ComplaintPriority;
   assignedTo?: string; // Engineer's User ID
   assignedToName?: string;
+  currentHandlerLevel?: EngineerLevel; // Level of the currently assigned engineer
   resolutionTimeline?: Date; // Expected resolution date
   resolvedAt?: Date;
   resolutionDetails?: string;
