@@ -36,7 +36,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Complaint, ComplaintPriority, ComplaintStatus } from "@/types";
+import type { Complaint, ComplaintPriority } from "@/types"; // Removed ComplaintStatus from here as it's imported below
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types"; // Import ComplaintStatus and aliased ComplaintPriority
 import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -126,7 +127,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
       header: "Priority",
       cell: ({ row }) => {
         const priority = row.getValue("priority") as ComplaintPriority | undefined;
-        return priority ? <Badge variant={priority === ComplaintPriority.Critical || priority === ComplaintPriority.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
+        return priority ? <Badge variant={priority === ComplaintPriorityEnum.Critical || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
       },
       filterFn: (row, id, value) => {
         return value.includes(row.getValue(id))
@@ -221,7 +222,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
   });
   
   const statusOptions = Object.values(ComplaintStatus);
-  const priorityOptions = Object.values(ComplaintPriority);
+  const priorityOptions = Object.values(ComplaintPriorityEnum);
 
   return (
     <div className="w-full">
