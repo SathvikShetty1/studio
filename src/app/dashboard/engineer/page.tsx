@@ -12,26 +12,27 @@ import { ComplaintStatus } from '@/types';
 
 export default function EngineerDashboardPage() {
   const { user } = useAuth();
-  const [assignedComplaints, setAssignedComplaints] = useState<Complaint[]>([]);
+  // Initialize state by filtering from the global mock data
+  const [assignedComplaints, setAssignedComplaints] = useState<Complaint[]>(() => {
+    if (user) {
+      return initialMockComplaints.filter(c => c.assignedTo === user.id);
+    }
+    return [];
+  });
 
+  // Effect to re-filter and update `assignedComplaints` if the source array's length changes
+  // or if the user changes.
   useEffect(() => {
     if (user) {
-      // Simulate fetching engineer's assigned complaints
       const engineerComplaints = initialMockComplaints.filter(c => c.assignedTo === user.id);
       setAssignedComplaints(engineerComplaints);
+    } else {
+      setAssignedComplaints([]); // Clear if no user
     }
-  }, [user]);
-  
-  // This effect ensures that if mockComplaints is updated elsewhere (e.g. admin assigns), this page reflects it.
-  useEffect(() => {
-    if(user) {
-        const engineerComplaints = initialMockComplaints.filter(c => c.assignedTo === user.id);
-        setAssignedComplaints(engineerComplaints);
-    }
-  }, [initialMockComplaints, user]);
-
+  }, [initialMockComplaints.length, user]); // React to source data changes and user changes
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
+    // Update local state first for immediate UI feedback
     setAssignedComplaints(prevComplaints =>
       prevComplaints.map(c => (c.id === updatedComplaint.id ? updatedComplaint : c))
     );
@@ -41,14 +42,20 @@ export default function EngineerDashboardPage() {
     if (index !== -1) {
       initialMockComplaints[index] = updatedComplaint;
     }
+    // If status changes, it might affect assignedComplaints list, re-filter from source.
+    // This also ensures that if an engineer resolves a complaint, and it's filtered out by status,
+    // the assignedComplaints list is updated.
+    if (user) {
+        const currentEngineerComplaints = initialMockComplaints.filter(c => c.assignedTo === user.id);
+        setAssignedComplaints(currentEngineerComplaints);
+    }
   };
     
-    const stats = {
-        total: assignedComplaints.length,
-        pending: assignedComplaints.filter(c => c.status === ComplaintStatus.Assigned || c.status === ComplaintStatus.InProgress).length,
-        resolved: assignedComplaints.filter(c => c.status === ComplaintStatus.Resolved || c.status === ComplaintStatus.Closed).length,
-    };
-
+  const stats = {
+      total: assignedComplaints.length,
+      pending: assignedComplaints.filter(c => c.status === ComplaintStatus.Assigned || c.status === ComplaintStatus.InProgress).length,
+      resolved: assignedComplaints.filter(c => c.status === ComplaintStatus.Resolved || c.status === ComplaintStatus.Closed).length,
+  };
 
   if (!user || user.role !== 'engineer') {
     // Should be handled by AuthProvider & layout, but as a safeguard:

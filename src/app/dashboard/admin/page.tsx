@@ -12,14 +12,13 @@ import { ComplaintStatus } from '@/types';
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
-  const [allComplaints, setAllComplaints] = useState<Complaint[]>(initialMockComplaints);
+  // Initialize with a copy of the current state of initialMockComplaints
+  const [allComplaints, setAllComplaints] = useState<Complaint[]>(() => [...initialMockComplaints]);
 
-  // This effect ensures that if mockComplaints is updated elsewhere (e.g. customer submit), this page reflects it.
-  // In a real app, this would be handled by re-fetching or real-time updates.
+  // Effect to update `allComplaints` if the source array's length changes (e.g., new complaint added)
   useEffect(() => {
     setAllComplaints([...initialMockComplaints]);
-  }, []);
-
+  }, [initialMockComplaints.length]); // React to additions/deletions
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
     setAllComplaints(prevComplaints =>
@@ -33,13 +32,14 @@ export default function AdminDashboardPage() {
   };
 
   const handleDeleteComplaint = (complaintId: string) => {
-    setAllComplaints(prevComplaints =>
-      prevComplaints.filter(c => c.id !== complaintId)
-    );
-    const index = initialMockComplaints.findIndex(c => c.id === complaintId);
-    if (index !== -1) {
-      initialMockComplaints.splice(index, 1);
-    }
+    const newComplaints = initialMockComplaints.filter(c => c.id !== complaintId)
+    // Update global mock data first
+    initialMockComplaints.length = 0; // Clear array
+    initialMockComplaints.push(...newComplaints); // Repopulate with filtered complaints
+    
+    // Then update local state, which will trigger re-render if useEffect for length change doesn't catch it fast enough
+    // or if this is the primary action source.
+    setAllComplaints([...initialMockComplaints]);
   };
   
   const stats = {
