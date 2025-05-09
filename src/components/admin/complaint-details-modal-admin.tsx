@@ -1,9 +1,10 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Complaint, User, ComplaintCategory, ComplaintPriority } from '@/types';
-import { ComplaintStatus } from '@/types';
+import type { Complaint, User, ComplaintCategory } from '@/types';
+import { ComplaintStatus, ComplaintPriority } from '@/types'; // ComplaintPriority enum imported here
 import { mockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
 import {
@@ -212,3 +213,4 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
+
