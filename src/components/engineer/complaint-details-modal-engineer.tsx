@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -20,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ComplaintDetailsModalEngineerProps {
   complaint: Complaint | null;
@@ -174,3 +176,4 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     </Dialog>
   );
 }
+
