@@ -1,10 +1,9 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import type { Complaint, User, ComplaintCategory } from '@/types';
-import { ComplaintStatus, ComplaintPriority } from '@/types'; // ComplaintPriority enum imported here
+import { ComplaintStatus, ComplaintPriority } from '@/types';
 import { mockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
 import {
@@ -115,7 +114,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <p><strong>Status:</strong> <Badge variant="secondary">{complaint.status}</Badge></p>
+                  <div className="flex items-center"><strong>Status:</strong> <Badge variant="secondary" className="ml-1">{complaint.status}</Badge></div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -213,4 +212,3 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
-
