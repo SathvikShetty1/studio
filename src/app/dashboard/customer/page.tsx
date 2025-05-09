@@ -6,7 +6,7 @@ import { ComplaintCard } from '@/components/complaints/complaint-card';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { mockComplaints as allMockComplaints } from '@/lib/mock-data';
-import { PlusCircle, ListFilter } from 'lucide-react';
+import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react'; // Added ShieldAlert
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
