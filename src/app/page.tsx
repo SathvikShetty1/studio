@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldAlert, FileText, Users, Lightbulb } from "lucide-react";
@@ -34,7 +35,7 @@ export default function LandingPage() {
                   <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none text-primary">
                     Streamline Your Complaint Management
                   </h1>
-                  <p className="max-w-[600px] text-muted-foreground md:text-xl">
+                  <p className="max-w-[600px] mx-auto text-muted-foreground md:text-xl">
                     Complaint Central offers a robust platform for customers to voice concerns and for businesses to
                     manage, track, and resolve issues efficiently. Powered by AI for smarter triage.
                   </p>
@@ -65,7 +66,7 @@ export default function LandingPage() {
               <div className="space-y-2">
                 <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm text-secondary-foreground">Key Features</div>
                 <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl">Why Choose Complaint Central?</h2>
-                <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                <p className="max-w-[900px] mx-auto text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
                   Our platform is designed with both customers and administrators in mind, ensuring a seamless experience from submission to resolution.
                 </p>
               </div>
