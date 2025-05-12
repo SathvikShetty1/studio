@@ -4,8 +4,18 @@ import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// It's recommended to store these in environment variables
+// CRITICAL: Your web app's Firebase configuration.
+// These values MUST be stored in a .env.local file in the root of your project.
+// Example .env.local content:
+// NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyYourActualApiKey
+// NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+// NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+// NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+// NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+// NEXT_PUBLIC_FIREBASE_APP_ID=1:your-app-id:web:your-web-app-identifier
+//
+// Obtain these values from your Firebase project settings:
+// Project Settings (gear icon) > General tab > Your apps > Web app > SDK setup and configuration (Config).
 
 const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -16,10 +26,11 @@ const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
 if (!apiKey || !authDomain || !projectId || !storageBucket || !messagingSenderId || !appId) {
   throw new Error(
-    "Firebase configuration environment variables are not set. " +
+    "CRITICAL FIREBASE CONFIG ERROR: One or more Firebase configuration environment variables are missing. " +
     "Please ensure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, " +
     "NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, " +
-    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, and NEXT_PUBLIC_FIREBASE_APP_ID are defined in your .env.local file."
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, and NEXT_PUBLIC_FIREBASE_APP_ID are defined " +
+    "in a .env.local file in your project root. Obtain these values from your Firebase project settings."
   );
 }
 
@@ -44,4 +55,3 @@ const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
 
 export { app, auth, db };
-
