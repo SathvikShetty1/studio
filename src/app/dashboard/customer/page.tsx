@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -22,7 +21,7 @@ import { addComplaint, getUserComplaints } from '@/services/complaintService';
 import { useToast } from '@/hooks/use-toast';
 
 export default function CustomerDashboardPage() {
-  const { user, firebaseUser, isLoading: authLoading } = useAuth(); // Use firebaseUser for UID
+  const { user, firebaseUser, isLoading: authLoading } = useAuth(); 
   const { toast } = useToast();
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
@@ -31,73 +30,66 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     async function fetchComplaints() {
-      if (firebaseUser && firebaseUser.uid) { // Check firebaseUser and its uid
-        console.log("[CustomerDashboardPage][useEffect] Attempting to fetch complaints for firebaseUser.uid:", firebaseUser.uid);
-        setIsLoadingComplaints(true);
-        let userComplaintsFromService: Complaint[] = [];
-        try {
-          if (typeof firebaseUser.uid !== 'string' || firebaseUser.uid.trim() === '') {
-            console.error("[CustomerDashboardPage][useEffect] Invalid firebaseUser.uid encountered:", firebaseUser.uid, ". Skipping fetch.");
-            setMyComplaints([]);
-            setIsLoadingComplaints(false);
-            return;
-          }
-          console.log("Fetching complaints for UID:", firebaseUser.uid); // Debugging line
-          userComplaintsFromService = await getUserComplaints(firebaseUser.uid); // Use firebaseUser.uid
-          console.log("[CustomerDashboardPage][useEffect] getUserComplaints returned:", JSON.stringify(userComplaintsFromService, null, 2), "Count:", userComplaintsFromService.length);
-          
-          if (Array.isArray(userComplaintsFromService)) {
-            const validComplaints = userComplaintsFromService.filter(c => c && typeof c.id === 'string');
-             if(validComplaints.length !== userComplaintsFromService.length) {
-                console.warn("[CustomerDashboardPage][useEffect] Some complaints were filtered out due to missing ID or being null. Original count:", userComplaintsFromService.length, "Valid count:", validComplaints.length);
-            }
-            setMyComplaints(validComplaints);
-          } else {
-            console.error("[CustomerDashboardPage][useEffect] getUserComplaints did not return an array. Received:", userComplaintsFromService);
-            setMyComplaints([]);
-             toast({
-                title: "Data Error",
-                description: "Received unexpected data format for complaints.",
-                variant: "destructive",
-            });
-          }
+      console.log("[CustomerDashboardPage][useEffect] Initiating fetchComplaints. FirebaseUser:", JSON.stringify(firebaseUser, null, 2));
 
-        } catch (error) {
-          console.error("[CustomerDashboardPage][useEffect] Error during fetchComplaints:", error);
-          setMyComplaints([]); 
-          toast({
-            title: "Error Fetching Complaints",
-            description: "Could not load your complaints. Please try again later.",
-            variant: "destructive",
+      if (!firebaseUser) {
+        console.warn("[CustomerDashboardPage][useEffect] firebaseUser is null or undefined. Skipping fetch.");
+        setMyComplaints([]);
+        setIsLoadingComplaints(false);
+        return;
+      }
+      if (!firebaseUser.uid) {
+        console.warn("[CustomerDashboardPage][useEffect] firebaseUser.uid is missing or empty. Skipping fetch.");
+        setMyComplaints([]);
+        setIsLoadingComplaints(false);
+        return;
+      }
+      
+      console.log("[CustomerDashboardPage][useEffect] Attempting to fetch complaints for firebaseUser.uid:", firebaseUser.uid);
+      setIsLoadingComplaints(true);
+      let userComplaintsFromService: Complaint[] = [];
+      try {
+        userComplaintsFromService = await getUserComplaints(firebaseUser.uid);
+        console.log("[CustomerDashboardPage][useEffect] getUserComplaints returned (raw):", JSON.stringify(userComplaintsFromService, null, 2), "Count:", userComplaintsFromService.length);
+        
+        if (Array.isArray(userComplaintsFromService)) {
+          const validComplaints = userComplaintsFromService.filter(c => c && typeof c.id === 'string');
+           if(validComplaints.length !== userComplaintsFromService.length) {
+              console.warn("[CustomerDashboardPage][useEffect] Some complaints were filtered out due to missing ID or being null. Original count:", userComplaintsFromService.length, "Valid count:", validComplaints.length);
+          }
+          console.log("[CustomerDashboardPage][useEffect] Valid complaints after filtering on page:", JSON.stringify(validComplaints, null, 2));
+          setMyComplaints(validComplaints);
+        } else {
+          console.error("[CustomerDashboardPage][useEffect] getUserComplaints did not return an array. Received:", userComplaintsFromService);
+          setMyComplaints([]);
+           toast({
+              title: "Data Error",
+              description: "Received unexpected data format for complaints.",
+              variant: "destructive",
           });
-        } finally {
-          setIsLoadingComplaints(false); 
-          console.log("[CustomerDashboardPage][useEffect] Finished fetching complaints. isLoadingComplaints set to false.");
         }
-      } else if (!authLoading && !firebaseUser) {
-        console.log("[CustomerDashboardPage][useEffect] No firebaseUser authenticated or firebaseUser.uid missing. Clearing complaints and not fetching.");
-        setMyComplaints([]);
-        setIsLoadingComplaints(false);
-      } else if (!authLoading && firebaseUser && !firebaseUser.uid) {
-        console.warn("[CustomerDashboardPage][useEffect] FirebaseUser object exists but firebaseUser.uid is missing:", JSON.stringify(firebaseUser), ". Clearing complaints.");
-        setMyComplaints([]);
-        setIsLoadingComplaints(false);
+
+      } catch (error) {
+        console.error("[CustomerDashboardPage][useEffect] Error during fetchComplaints:", error);
+        setMyComplaints([]); 
+        toast({
+          title: "Error Fetching Complaints",
+          description: "Could not load your complaints. Please try again later.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingComplaints(false); 
+        console.log("[CustomerDashboardPage][useEffect] Finished fetching complaints. isLoadingComplaints set to false.");
       }
     }
 
     if (!authLoading) {
       console.log("[CustomerDashboardPage][useEffect] Auth loading finished. Current Firebase User UID:", firebaseUser ? firebaseUser.uid : 'No firebaseUser', "App User Role:", user?.role, "IsLoadingComplaints initially:", isLoadingComplaints);
-      if (firebaseUser && firebaseUser.uid) {
-        fetchComplaints();
-      } else {
-         console.log("[CustomerDashboardPage][useEffect] Auth loaded, but no firebaseUser/firebaseUser.uid, so not fetching complaints.");
-         setIsLoadingComplaints(false);
-         setMyComplaints([]);
-      }
+      fetchComplaints(); // Call fetchComplaints which now includes the checks for firebaseUser and uid
     } else {
       console.log("[CustomerDashboardPage][useEffect] Auth still loading...");
     }
-  }, [firebaseUser, authLoading, toast, user?.role]); // Added user?.role to dependencies as it might affect rendering decisions
+  }, [firebaseUser, authLoading, toast, user?.role]);
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     console.log("[CustomerDashboardPage][handleComplaintSubmitted] Submitting data:", JSON.stringify(newComplaintData));
@@ -105,17 +97,16 @@ export default function CustomerDashboardPage() {
         toast({ title: "Error", description: "User not authenticated properly.", variant: "destructive" });
         return;
     }
-    // Ensure the data passed to addComplaint includes customerId which should be firebaseUser.uid
     const completeComplaintData = {
         ...newComplaintData,
-        customerId: firebaseUser.uid, // This is crucial
-         // customerName should also be present and correct
+        customerId: firebaseUser.uid, 
+        // customerName is already part of newComplaintData if passed from form
     };
 
     const addedComplaint = await addComplaint(completeComplaintData);
     if (addedComplaint) {
       console.log("[CustomerDashboardPage][handleComplaintSubmitted] Complaint added:", JSON.stringify(addedComplaint));
-      setMyComplaints(prev => [addedComplaint, ...prev].filter(c => c && c.id));
+      setMyComplaints(prev => [addedComplaint, ...prev].filter(c => c && c.id)); // Ensure filtering here too
       setShowSubmitForm(false);
       toast({
           title: "Complaint Submitted!",
@@ -161,13 +152,11 @@ export default function CustomerDashboardPage() {
         <div className="my-6">
           <h2 className="text-xl font-semibold mb-4">Submit a New Complaint</h2>
           <SubmitComplaintForm onComplaintSubmitted={(data) => {
-             // user from useAuth contains Firestore data (name, role etc.)
-             // firebaseUser from useAuth contains Auth data (uid, email etc.)
              if (user && user.name && firebaseUser && firebaseUser.uid) { 
                 const fullData = {
                     ...data,
-                    customerId: firebaseUser.uid, // Use firebaseUser.uid for customerId
-                    customerName: user.name, // user.name from Firestore user details
+                    customerId: firebaseUser.uid, 
+                    customerName: user.name, 
                     status: ComplaintStatus.Submitted, 
                 };
                 handleComplaintSubmitted(fullData);
@@ -207,7 +196,7 @@ export default function CustomerDashboardPage() {
              {statusFilter.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem onCheckedChange={() => setStatusFilter([])} className="text-destructive">
+                <DropdownMenuCheckboxItem onCheckedChange={() => setStatusFilter([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                   Clear Filters
                 </DropdownMenuCheckboxItem>
               </>
@@ -235,9 +224,10 @@ export default function CustomerDashboardPage() {
               Ready to submit your first complaint? Click the button above.
             </p>
           )}
+           {/* Debugging output for empty state */}
+          {console.log("[CustomerDashboardPage][Render] Displaying empty state. myComplaints length:", myComplaints.length, "isLoadingComplaints:", isLoadingComplaints, "authLoading:", authLoading)}
         </div>
       )}
     </div>
   );
 }
-
