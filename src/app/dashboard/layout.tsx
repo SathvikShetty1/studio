@@ -5,17 +5,12 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   FilePlus2,
-  ListChecks,
   Users,
-  Settings,
   Briefcase,
   ShieldAlert,
-  // Bot, // Removed Bot icon
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   SidebarProvider,
   Sidebar,
@@ -27,13 +22,13 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarInset,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/common/logo";
 import { UserNav } from "@/components/common/user-nav";
 import { useAuth } from "@/hooks/use-auth";
 import { UserRole } from "@/types";
 import { usePathname } from "next/navigation";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   href: string;
@@ -47,9 +42,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/customer/submit", icon: FilePlus2, label: "New Complaint", roles: [UserRole.Customer] },
   { href: "/dashboard/admin", icon: LayoutDashboard, label: "Admin Dashboard", roles: [UserRole.Admin] },
   { href: "/dashboard/admin/manage-users", icon: Users, label: "Manage Users", roles: [UserRole.Admin] },
-  // { href: "/dashboard/admin/ai-tools", icon: Bot, label: "AI Tools", roles: [UserRole.Admin] }, // Removed AI Tools
   { href: "/dashboard/engineer", icon: Briefcase, label: "My Tasks", roles: [UserRole.Engineer] },
-  { href: "/dashboard/settings", icon: Settings, label: "Settings", roles: [UserRole.Customer, UserRole.Admin, UserRole.Engineer] },
 ];
 
 export default function DashboardLayout({
@@ -57,7 +50,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
   const pathname = usePathname();
 
   if (isLoading || !user) {
@@ -106,7 +99,6 @@ export default function DashboardLayout({
           <header className="sticky top-0 z-10 flex h-[57px] items-center gap-1 border-b bg-background px-4">
             <SidebarTrigger className="md:hidden" /> {/* Mobile trigger */}
             <h1 className="text-xl font-semibold grow">
-              {/* Dynamic title based on page can be added here */}
               Complaint Central
             </h1>
             <div className="ml-auto">
@@ -121,3 +113,4 @@ export default function DashboardLayout({
     </SidebarProvider>
   );
 }
+

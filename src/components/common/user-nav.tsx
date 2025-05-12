@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, User as UserIcon, Settings, LayoutDashboard } from "lucide-react";
+import { LogOut, LayoutDashboard } from "lucide-react"; // Removed UserIcon, Settings
 import Link from "next/link";
 
 export function UserNav() {
@@ -23,9 +23,10 @@ export function UserNav() {
   }
 
   const getInitials = (name: string) => {
+    if (!name) return '';
     const names = name.split(' ');
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
-    return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+    return (names[0][0] + (names.length > 1 ? names[names.length - 1][0] : '')).toUpperCase();
   }
 
   const dashboardLink = `/dashboard/${user.role}`;
@@ -58,12 +59,14 @@ export function UserNav() {
               <span>Dashboard</span>
             </Link>
           </DropdownMenuItem>
+          {/* Removed Settings link
           <DropdownMenuItem asChild>
             <Link href="/dashboard/settings">
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </Link>
           </DropdownMenuItem>
+          */}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout}>
