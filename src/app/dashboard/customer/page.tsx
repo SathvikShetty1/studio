@@ -31,17 +31,33 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     async function fetchComplaints() {
-      if (user) {
+      if (user && user.id) { // Ensure user and user.id are available
         setIsLoadingComplaints(true);
-        const userComplaints = await getUserComplaints(user.id);
-        setMyComplaints(userComplaints);
+        try {
+          const userComplaints = await getUserComplaints(user.id);
+          setMyComplaints(userComplaints);
+        } catch (error) {
+          console.error("Failed to fetch user complaints:", error);
+          setMyComplaints([]); // Set to empty array on error
+          toast({
+            title: "Error Fetching Complaints",
+            description: "Could not load your complaints. Please try again later.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoadingComplaints(false);
+        }
+      } else if (!authLoading && !user) {
+        // If auth is done loading and there's no user, clear complaints.
+        setMyComplaints([]);
         setIsLoadingComplaints(false);
       }
     }
-    if (!authLoading) {
+
+    if (!authLoading) { // Only run if auth is no longer loading
       fetchComplaints();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, toast]); // Added toast to dependencies
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     const addedComplaint = await addComplaint(newComplaintData);
@@ -66,7 +82,8 @@ export default function CustomerDashboardPage() {
   );
 
   if (authLoading || (isLoadingComplaints && user)) return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
-  if (!user) return <p>Please login to view your dashboard.</p>; // Should be handled by AuthProvider
+  // Note: if !user after authLoading is false, AuthProvider should redirect.
+  // So, we might not hit the `!user` case here often if redirection is quick.
 
   return (
     <div className="space-y-6">
@@ -86,14 +103,13 @@ export default function CustomerDashboardPage() {
       {showSubmitForm && (
         <div className="my-6">
           <h2 className="text-xl font-semibold mb-4">Submit a New Complaint</h2>
-          {/* Passing the function that calls the service */}
           <SubmitComplaintForm onComplaintSubmitted={(data) => {
              if (user) {
                 const fullData = {
                     ...data,
                     customerId: user.id,
                     customerName: user.name,
-                    status: ComplaintStatus.Submitted, // Initial status
+                    status: ComplaintStatus.Submitted, 
                 };
                 handleComplaintSubmitted(fullData);
             }
@@ -138,7 +154,7 @@ export default function CustomerDashboardPage() {
         </DropdownMenu>
       </div>
 
-      {isLoadingComplaints ? (
+      {isLoadingComplaints && !authLoading ? ( // Show loading complaints only if auth is done
          <p>Loading complaints...</p>
       ) : filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -162,3 +178,4 @@ export default function CustomerDashboardPage() {
     </div>
   );
 }
+
