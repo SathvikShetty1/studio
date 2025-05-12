@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -31,14 +30,16 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     async function fetchComplaints() {
-      if (user && user.id) { // Ensure user and user.id are available
+      if (user && user.id) {
+        console.log("[CustomerDashboardPage] Fetching complaints for user.id:", user.id);
         setIsLoadingComplaints(true);
         try {
           const userComplaints = await getUserComplaints(user.id);
+          console.log("[CustomerDashboardPage] Received complaints:", JSON.stringify(userComplaints, null, 2));
           setMyComplaints(userComplaints);
         } catch (error) {
-          console.error("Failed to fetch user complaints:", error);
-          setMyComplaints([]); // Set to empty array on error
+          console.error("[CustomerDashboardPage] Failed to fetch user complaints:", error);
+          setMyComplaints([]); 
           toast({
             title: "Error Fetching Complaints",
             description: "Could not load your complaints. Please try again later.",
@@ -48,16 +49,23 @@ export default function CustomerDashboardPage() {
           setIsLoadingComplaints(false);
         }
       } else if (!authLoading && !user) {
-        // If auth is done loading and there's no user, clear complaints.
+        console.log("[CustomerDashboardPage] No user or user.id, clearing complaints.");
+        setMyComplaints([]);
+        setIsLoadingComplaints(false);
+      } else if (!authLoading && user && !user.id) {
+        console.warn("[CustomerDashboardPage] User object exists but user.id is missing:", user);
         setMyComplaints([]);
         setIsLoadingComplaints(false);
       }
     }
 
-    if (!authLoading) { // Only run if auth is no longer loading
+    if (!authLoading) {
+      console.log("[CustomerDashboardPage] Auth loading finished. User:", user ? user.id : 'No user');
       fetchComplaints();
+    } else {
+      console.log("[CustomerDashboardPage] Auth still loading...");
     }
-  }, [user, authLoading, toast]); // Added toast to dependencies
+  }, [user, authLoading]); 
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     const addedComplaint = await addComplaint(newComplaintData);
@@ -82,8 +90,6 @@ export default function CustomerDashboardPage() {
   );
 
   if (authLoading || (isLoadingComplaints && user)) return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
-  // Note: if !user after authLoading is false, AuthProvider should redirect.
-  // So, we might not hit the `!user` case here often if redirection is quick.
 
   return (
     <div className="space-y-6">
@@ -154,7 +160,7 @@ export default function CustomerDashboardPage() {
         </DropdownMenu>
       </div>
 
-      {isLoadingComplaints && !authLoading ? ( // Show loading complaints only if auth is done
+      {isLoadingComplaints && !authLoading ? ( 
          <p>Loading complaints...</p>
       ) : filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -178,4 +184,3 @@ export default function CustomerDashboardPage() {
     </div>
   );
 }
-
