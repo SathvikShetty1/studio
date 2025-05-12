@@ -19,11 +19,24 @@ export default function EngineerDashboardPage() {
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
 
   const fetchAssignedComplaints = async () => {
-    if (user) {
+    if (user && user.id) { // Ensure user and user.id are available
       setIsLoadingComplaints(true);
-      const engineerComplaints = await getEngineerComplaints(user.id);
-      setAssignedComplaints(engineerComplaints);
-      setIsLoadingComplaints(false);
+      console.log(`[EngineerDashboardPage] Fetching complaints for engineer ID: ${user.id}`);
+      try {
+        const engineerComplaints = await getEngineerComplaints(user.id);
+        console.log(`[EngineerDashboardPage] Received ${engineerComplaints.length} complaints for engineer ${user.id}:`, engineerComplaints);
+        setAssignedComplaints(engineerComplaints);
+      } catch (error) {
+        console.error(`[EngineerDashboardPage] Error fetching complaints for engineer ${user.id}:`, error);
+        toast({ title: "Error", description: "Could not fetch your assigned complaints.", variant: "destructive" });
+        setAssignedComplaints([]); // Set to empty array on error
+      } finally {
+        setIsLoadingComplaints(false);
+      }
+    } else {
+      console.warn("[EngineerDashboardPage] User or user.id not available for fetching complaints.");
+      setIsLoadingComplaints(false); // Ensure loading state is reset
+      setAssignedComplaints([]); // Ensure complaints are empty if no user
     }
   };
 
@@ -31,7 +44,7 @@ export default function EngineerDashboardPage() {
     if (!authLoading && user && user.role === 'engineer') {
       fetchAssignedComplaints();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading]); // user.id is not needed here as user object change will trigger it
 
   const handleUpdateComplaint = async (updatedComplaint: Complaint) => {
     const originalComplaints = [...assignedComplaints];
@@ -46,7 +59,8 @@ export default function EngineerDashboardPage() {
       toast({ title: "Update Failed", description: "Could not update complaint in the database.", variant: "destructive"});
     } else {
       // Re-fetch to ensure data consistency, especially if status change might affect filtering
-      await fetchAssignedComplaints();
+      // For engineer, updating often means it's resolved or needs admin attention, so re-fetch is good.
+      await fetchAssignedComplaints(); 
       // toast({ title: "Complaint Updated", description: `Complaint #${updatedComplaint.id.slice(-6)} updated.`});
     }
   };
@@ -56,7 +70,7 @@ export default function EngineerDashboardPage() {
       pending: assignedComplaints.filter(c => 
         c.status === ComplaintStatus.Assigned || 
         c.status === ComplaintStatus.InProgress ||
-        c.status === ComplaintStatus.Unresolved // Unresolved is also pending action for engineer
+        c.status === ComplaintStatus.Unresolved 
       ).length,
       resolved: assignedComplaints.filter(c => 
         c.status === ComplaintStatus.Resolved || 
@@ -119,3 +133,4 @@ export default function EngineerDashboardPage() {
     </div>
   );
 }
+

@@ -141,8 +141,9 @@ export async function getAllComplaints(): Promise<Complaint[]> {
 export async function getEngineerComplaints(engineerId: string): Promise<Complaint[]> {
   try {
     const complaintsCol = collection(db, 'complaints');
+    // Ensure the query uses 'assignedTo' which is the field for engineer ID
     const q = query(complaintsCol, where('assignedTo', '==', engineerId), orderBy('updatedAt', 'desc'));
-    console.log(`[complaintService][getEngineerComplaints] Executing query for engineerId: ${engineerId}`);
+    console.log(`[complaintService][getEngineerComplaints] Executing query for engineerId (assignedTo field): ${engineerId}`);
     const complaintSnapshot = await getDocs(q);
     console.log(`[complaintService][getEngineerComplaints] Query for engineer ${engineerId} found ${complaintSnapshot.size} documents.`);
     return complaintSnapshot.docs.map(docNode => convertComplaintTimestamps({ id: docNode.id, ...docNode.data() }));
@@ -195,3 +196,4 @@ export async function getComplaintById(complaintId: string): Promise<Complaint |
     return null;
   }
 }
+
