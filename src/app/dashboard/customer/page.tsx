@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -31,15 +32,38 @@ export default function CustomerDashboardPage() {
   useEffect(() => {
     async function fetchComplaints() {
       if (user && user.id) {
-        console.log("[CustomerDashboardPage][useEffect] Fetching complaints for user.id:", user.id);
+        console.log("[CustomerDashboardPage][useEffect] Attempting to fetch complaints for user.id:", user.id, "User object:", JSON.stringify(user));
         setIsLoadingComplaints(true);
-        let userComplaints: Complaint[] = [];
+        let userComplaintsFromService: Complaint[] = [];
         try {
-          userComplaints = await getUserComplaints(user.id);
-          console.log("[CustomerDashboardPage][useEffect] Received complaints from service:", JSON.stringify(userComplaints, null, 2), "Count:", userComplaints.length);
-          setMyComplaints(userComplaints);
+          if (typeof user.id !== 'string' || user.id.trim() === '') {
+            console.error("[CustomerDashboardPage][useEffect] Invalid user.id encountered:", user.id, ". Skipping fetch.");
+            setMyComplaints([]);
+            setIsLoadingComplaints(false);
+            return;
+          }
+          userComplaintsFromService = await getUserComplaints(user.id);
+          console.log("[CustomerDashboardPage][useEffect] getUserComplaints returned:", JSON.stringify(userComplaintsFromService, null, 2), "Count:", userComplaintsFromService.length);
+          
+          // Validate data before setting state
+          if (Array.isArray(userComplaintsFromService)) {
+            const validComplaints = userComplaintsFromService.filter(c => c && typeof c.id === 'string');
+             if(validComplaints.length !== userComplaintsFromService.length) {
+                console.warn("[CustomerDashboardPage][useEffect] Some complaints were filtered out due to missing ID or being null. Original count:", userComplaintsFromService.length, "Valid count:", validComplaints.length);
+            }
+            setMyComplaints(validComplaints);
+          } else {
+            console.error("[CustomerDashboardPage][useEffect] getUserComplaints did not return an array. Received:", userComplaintsFromService);
+            setMyComplaints([]);
+             toast({
+                title: "Data Error",
+                description: "Received unexpected data format for complaints.",
+                variant: "destructive",
+            });
+          }
+
         } catch (error) {
-          console.error("[CustomerDashboardPage][useEffect] Failed to fetch user complaints:", error);
+          console.error("[CustomerDashboardPage][useEffect] Error during fetchComplaints:", error);
           setMyComplaints([]); 
           toast({
             title: "Error Fetching Complaints",
@@ -48,36 +72,48 @@ export default function CustomerDashboardPage() {
           });
         } finally {
           setIsLoadingComplaints(false); 
+          console.log("[CustomerDashboardPage][useEffect] Finished fetching complaints. isLoadingComplaints set to false.");
         }
       } else if (!authLoading && !user) {
-        console.log("[CustomerDashboardPage][useEffect] No user or user.id, clearing complaints.");
+        console.log("[CustomerDashboardPage][useEffect] No user authenticated or user.id missing. Clearing complaints and not fetching.");
         setMyComplaints([]);
         setIsLoadingComplaints(false);
       } else if (!authLoading && user && !user.id) {
-        console.warn("[CustomerDashboardPage][useEffect] User object exists but user.id is missing:", user);
+        console.warn("[CustomerDashboardPage][useEffect] User object exists but user.id is missing:", JSON.stringify(user), ". Clearing complaints.");
         setMyComplaints([]);
         setIsLoadingComplaints(false);
       }
     }
 
     if (!authLoading) {
-      console.log("[CustomerDashboardPage][useEffect] Auth loading finished. User:", user ? user.id : 'No user', "Role:", user?.role);
-      fetchComplaints();
+      console.log("[CustomerDashboardPage][useEffect] Auth loading finished. Current User:", user ? user.id : 'No user', "Role:", user?.role, "IsLoadingComplaints initially:", isLoadingComplaints);
+      // Only fetch if user and user.id are present
+      if (user && user.id) {
+        fetchComplaints();
+      } else {
+         console.log("[CustomerDashboardPage][useEffect] Auth loaded, but no user/user.id, so not fetching complaints.");
+         setIsLoadingComplaints(false); // Ensure loading is false if not fetching
+         setMyComplaints([]); // Clear complaints if user becomes null
+      }
     } else {
       console.log("[CustomerDashboardPage][useEffect] Auth still loading...");
     }
-  }, [user, authLoading, toast]); 
+  }, [user, authLoading, toast]); // user.id is implicitly part of 'user' dependency.
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
+    console.log("[CustomerDashboardPage][handleComplaintSubmitted] Submitting data:", JSON.stringify(newComplaintData));
     const addedComplaint = await addComplaint(newComplaintData);
     if (addedComplaint) {
-      setMyComplaints(prev => [addedComplaint, ...prev]);
+      console.log("[CustomerDashboardPage][handleComplaintSubmitted] Complaint added:", JSON.stringify(addedComplaint));
+      // Add to the beginning of the list and ensure it's a valid complaint object
+      setMyComplaints(prev => [addedComplaint, ...prev].filter(c => c && c.id));
       setShowSubmitForm(false);
       toast({
           title: "Complaint Submitted!",
           description: `Your complaint has been successfully submitted.`,
       });
     } else {
+      console.error("[CustomerDashboardPage][handleComplaintSubmitted] Failed to add complaint.");
       toast({
           title: "Submission Failed",
           description: "There was an error submitting your complaint. Please try again.",
@@ -87,15 +123,17 @@ export default function CustomerDashboardPage() {
   };
   
   const filteredComplaints = myComplaints.filter(complaint => 
-    statusFilter.length === 0 || statusFilter.includes(complaint.status)
+    statusFilter.length === 0 || (complaint && statusFilter.includes(complaint.status))
   );
+  console.log("[CustomerDashboardPage][Render] Filtered complaints count:", filteredComplaints.length, "Original myComplaints count:", myComplaints.length, "Filters:", statusFilter);
 
-  if (authLoading || (isLoadingComplaints && user)) {
-    console.log("[CustomerDashboardPage][Render] Showing loading dashboard screen (authLoading || (isLoadingComplaints && user))...");
+
+  if (authLoading) { // Simplified loading check for initial auth
+    console.log("[CustomerDashboardPage][Render] Auth is loading. Showing main loading screen...");
     return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
   }
   
-  console.log("[CustomerDashboardPage][Render] Page rendering. authLoading:", authLoading, "isLoadingComplaints:", isLoadingComplaints, "user:", user?.id, "myComplaints count:", myComplaints.length);
+  // console.log("[CustomerDashboardPage][Render] Page rendering. authLoading:", authLoading, "isLoadingComplaints:", isLoadingComplaints, "user:", user?.id, "myComplaints count:", myComplaints.length);
 
 
   return (
@@ -117,14 +155,17 @@ export default function CustomerDashboardPage() {
         <div className="my-6">
           <h2 className="text-xl font-semibold mb-4">Submit a New Complaint</h2>
           <SubmitComplaintForm onComplaintSubmitted={(data) => {
-             if (user) {
+             if (user && user.id && user.name) { // Ensure user.name is also available
                 const fullData = {
                     ...data,
                     customerId: user.id,
-                    customerName: user.name,
+                    customerName: user.name, // Make sure user.name is populated
                     status: ComplaintStatus.Submitted, 
                 };
                 handleComplaintSubmitted(fullData);
+            } else {
+                console.error("[CustomerDashboardPage][SubmitComplaintForm] Cannot submit, user details incomplete:", user);
+                toast({title: "Cannot Submit", description: "User details are incomplete. Please try logging out and in again.", variant: "destructive"});
             }
           }} />
           <Separator className="my-6" />
@@ -168,7 +209,7 @@ export default function CustomerDashboardPage() {
       </div>
 
       {isLoadingComplaints && !authLoading ? ( 
-         <p>Loading complaints...</p>
+         <p>Loading complaints list...</p> // More specific loading text
       ) : filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredComplaints.map(complaint => (
@@ -191,3 +232,4 @@ export default function CustomerDashboardPage() {
     </div>
   );
 }
+
