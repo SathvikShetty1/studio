@@ -2,9 +2,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Complaint, User, ComplaintCategory } from '@/types';
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
-import { mockUsers } from '@/lib/mock-data';
+import type { Complaint, User } from '@/types';
+import { ComplaintStatus, ComplaintPriority, EngineerLevel, UserRole } from '@/types';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,14 +21,15 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from '@/hooks/use-auth';
+import { getAllUsers } from '@/services/userService'; // To fetch engineers
 
 interface ComplaintDetailsModalAdminProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => void;
+  onUpdateComplaint: (updatedComplaint: Complaint) => Promise<void>; // Make async for service call
 }
 
 const UNASSIGNED_VALUE = "_UNASSIGNED_";
@@ -37,116 +37,125 @@ const engineerLevelOrder: EngineerLevel[] = [EngineerLevel.Junior, EngineerLevel
 
 export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalAdminProps) {
   const { user: adminUser } = useAuth();
-  const [selectedPriority, setSelectedPriority] = useState<ComplaintPriorityEnum | undefined>(complaint?.priority);
+  const [selectedPriority, setSelectedPriority] = useState<ComplaintPriority | undefined>(complaint?.priority);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo || UNASSIGNED_VALUE);
   const [internalNote, setInternalNote] = useState('');
+  const [allEngineers, setAllEngineers] = useState<User[]>([]);
+  const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>([]);
+  const [isLoadingEngineers, setIsLoadingEngineers] = useState(true);
   const { toast } = useToast();
 
-  const allEngineers = useMemo(() => mockUsers.filter(u => u.role === UserRole.Engineer), []);
+  useEffect(() => {
+    async function fetchEngineers() {
+      setIsLoadingEngineers(true);
+      const users = await getAllUsers();
+      const engineers = users.filter(u => u.role === UserRole.Engineer);
+      setAllEngineers(engineers);
+      setIsLoadingEngineers(false);
+    }
+    if (isOpen) { // Fetch engineers when modal opens
+      fetchEngineers();
+    }
+  }, [isOpen]);
 
-  const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>(allEngineers);
 
   useEffect(() => {
-    if (complaint) {
+    if (complaint && !isLoadingEngineers) {
       setSelectedPriority(complaint.priority);
       setSelectedEngineerId(complaint.assignedTo || UNASSIGNED_VALUE);
       setInternalNote('');
 
       let displayEngineers = [...allEngineers];
       if ((complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo) {
-        const currentAssignee = mockUsers.find(u => u.id === complaint.assignedTo);
+        const currentAssignee = allEngineers.find(u => u.id === complaint.assignedTo);
         if (currentAssignee && currentAssignee.role === UserRole.Engineer && currentAssignee.engineerLevel) {
           const currentLevelIndex = engineerLevelOrder.indexOf(currentAssignee.engineerLevel);
-          if (currentLevelIndex < engineerLevelOrder.length - 1) { // Not already at highest level
+          if (currentLevelIndex < engineerLevelOrder.length - 1) { 
             displayEngineers = allEngineers.filter(eng => 
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else { 
+             // Already at executive, can only assign to other executives or stay with current one if no others
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-            if (displayEngineers.length === 0) {
-                const otherExecutives = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-                if (otherExecutives.length > 0) {
-                    displayEngineers = otherExecutives;
-                } else {
-                    displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
-                }
+            if (displayEngineers.length === 0) { // If no *other* executives, list all executives including current
+                 displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
             }
           }
         }
       }
       setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers); 
-    } else {
+    } else if (!isLoadingEngineers) {
       setEngineersForAssignment(allEngineers);
     }
-  }, [complaint, allEngineers]);
+  }, [complaint, allEngineers, isLoadingEngineers]);
 
 
   if (!complaint) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     let updatedStatus = complaint.status;
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
-    const assignedEngineer = finalSelectedEngineerId ? mockUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
+    const assignedEngineer = finalSelectedEngineerId ? allEngineers.find(e => e.id === finalSelectedEngineerId) : undefined;
 
     if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted || complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated)) {
       updatedStatus = ComplaintStatus.Assigned;
     }
 
 
-    const updatedComplaint: Complaint = {
+    const updatedComplaintData: Complaint = {
       ...complaint,
       priority: selectedPriority,
       assignedTo: finalSelectedEngineerId,
       assignedToName: assignedEngineer?.name,
       currentHandlerLevel: assignedEngineer?.engineerLevel,
       status: updatedStatus,
-      updatedAt: new Date(),
-      internalNotes: internalNote ? [
+      // updatedAt is handled by the service
+      internalNotes: internalNote && adminUser ? [
         ...(complaint.internalNotes || []),
         { 
           id: `note-${Date.now()}`, 
-          userId: adminUser?.id || 'unknown-admin', 
-          userName: adminUser?.name || 'Admin', 
+          userId: adminUser.id, 
+          userName: adminUser.name, 
           text: internalNote, 
-          timestamp: new Date(), 
+          timestamp: new Date(), // Will be converted to serverTimestamp by service if desired, or keep client time
           isInternal: true 
         }
       ] : complaint.internalNotes,
     };
-    onUpdateComplaint(updatedComplaint);
+    await onUpdateComplaint(updatedComplaintData); // Call the passed update handler
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
     onClose();
   };
   
-  const handleEscalate = () => {
-    if (!complaint || !adminUser) return;
+  const handleEscalate = async () => {
+    if (!adminUser) return;
 
     let newStatus = ComplaintStatus.Escalated;
-    if (complaint.status === ComplaintStatus.Resolved) {
+    if (complaint.status === ComplaintStatus.Resolved) { // Admin can escalate even resolved issues
         newStatus = ComplaintStatus.Escalated; 
     }
 
-
-    const escalatedComplaint: Complaint = {
+    const escalatedComplaintData: Complaint = {
       ...complaint,
       status: newStatus, 
-      updatedAt: new Date(),
-      priority: ComplaintPriorityEnum.Escalated, 
+      priority: ComplaintPriority.Escalated, 
+      // updatedAt handled by service
       internalNotes: [
         ...(complaint.internalNotes || []),
         { 
           id: `note-escalate-${Date.now()}`, 
           userId: adminUser.id, 
           userName: adminUser.name, 
-          text: `Complaint escalated by admin. Priority set to ${ComplaintPriorityEnum.Escalated}.`, 
+          text: `Complaint escalated by admin. Priority set to ${ComplaintPriority.Escalated}.`, 
           timestamp: new Date(), 
           isInternal: true 
         }
       ],
     };
-    onUpdateComplaint(escalatedComplaint); 
-    setSelectedPriority(ComplaintPriorityEnum.Escalated); 
-    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriorityEnum.Escalated}.` });
+    await onUpdateComplaint(escalatedComplaintData); 
+    setSelectedPriority(ComplaintPriority.Escalated); 
+    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriority.Escalated}.` });
+    // Modal might close or stay open depending on onUpdateComplaint behavior
   };
 
 
@@ -172,7 +181,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Current Priority:</strong>&nbsp;<Badge variant={(complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
+                  <div className="flex items-center">
+                    <strong>Current Priority:</strong>&nbsp;
+                    <Badge variant={(complaint.priority === ComplaintPriority.High || complaint.priority === ComplaintPriority.Escalated) ? "destructive" : "secondary"} className="ml-1">
+                      {complaint.priority || "N/A"}
+                    </Badge>
+                  </div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -201,34 +215,35 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="priority">Set Priority</Label>
-                    <Select value={selectedPriority} onValueChange={(value) => setSelectedPriority(value as ComplaintPriorityEnum)}>
+                    <Select value={selectedPriority || ""} onValueChange={(value) => setSelectedPriority(value as ComplaintPriority)}>
                       <SelectTrigger id="priority">
                         <SelectValue placeholder="Select priority" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(ComplaintPriorityEnum).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        {Object.values(ComplaintPriority).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
                     <Label htmlFor="assignee">Assign to Engineer</Label>
-                    <Select value={selectedEngineerId || UNASSIGNED_VALUE} onValueChange={setSelectedEngineerId}>
+                    <Select value={selectedEngineerId || UNASSIGNED_VALUE} onValueChange={setSelectedEngineerId} disabled={isLoadingEngineers}>
                       <SelectTrigger id="assignee">
-                        <SelectValue placeholder="Select engineer" />
+                        <SelectValue placeholder={isLoadingEngineers ? "Loading engineers..." : "Select engineer"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
                         {engineersForAssignment.length > 0 ? (
                             engineersForAssignment.map(eng => <SelectItem key={eng.id} value={eng.id}>{eng.name} ({eng.engineerLevel})</SelectItem>)
                         ) : (
-                            <SelectItem value="no_eligible_engineers" disabled>No eligible higher-level engineers</SelectItem>
+                            !isLoadingEngineers && <SelectItem value="no_eligible_engineers" disabled>No eligible engineers for assignment/escalation</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
-                    {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && engineersForAssignment.length === 0 && (
+                    {(!isLoadingEngineers && (complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && engineersForAssignment.length === 0 && allEngineers.length > 0) && (
                         <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for escalation based on current assignment.</p>
                     )}
+                     {isLoadingEngineers && <p className="text-xs text-muted-foreground mt-1">Loading engineer list...</p>}
                   </div>
                   
                   <div>

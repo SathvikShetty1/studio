@@ -11,7 +11,7 @@ export enum ComplaintPriority {
   Low = 'Low',
   Medium = 'Medium',
   High = 'High',
-  Escalated = 'Escalated', // Changed from Critical to Escalated
+  Escalated = 'Escalated',
 }
 
 export enum ComplaintStatus {
@@ -29,16 +29,16 @@ export interface ComplaintAttachment {
   id: string;
   fileName: string;
   fileType: string;
-  url: string; // URL to the uploaded file
+  url: string; 
 }
 
 export interface ComplaintNote {
   id: string;
-  userId: string; // ID of the staff member who added the note
+  userId: string; 
   userName: string; 
-  timestamp: Date;
+  timestamp: Date; // Firestore Timestamps will be converted to Date objects by service layer
   text: string;
-  isInternal: boolean; // True for staff-only notes
+  isInternal: boolean;
 }
 
 export interface Complaint {
@@ -48,19 +48,19 @@ export interface Complaint {
   category: ComplaintCategory;
   description: string;
   attachments?: ComplaintAttachment[];
-  submittedAt: Date;
-  updatedAt: Date;
+  submittedAt: Date; // Firestore Timestamps will be converted to Date objects
+  updatedAt: Date;   // Firestore Timestamps will be converted to Date objects
   status: ComplaintStatus;
   priority?: ComplaintPriority;
-  assignedTo?: string; // Engineer's User ID
+  assignedTo?: string; 
   assignedToName?: string;
-  currentHandlerLevel?: EngineerLevel; // Level of the currently assigned engineer
-  resolutionTimeline?: Date; // Expected resolution date
-  resolvedAt?: Date;
+  currentHandlerLevel?: EngineerLevel; 
+  resolutionTimeline?: Date; // Firestore Timestamps will be converted to Date objects
+  resolvedAt?: Date;         // Firestore Timestamps will be converted to Date objects
   resolutionDetails?: string;
   internalNotes?: ComplaintNote[];
   customerFeedback?: {
-    rating: number; // e.g., 1-5 stars
+    rating: number; 
     comment?: string;
   };
 }

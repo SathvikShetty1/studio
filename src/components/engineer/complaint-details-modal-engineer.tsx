@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import type { Complaint } from '@/types';
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types';
+import { ComplaintStatus, ComplaintPriority } from '@/types';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +28,7 @@ interface ComplaintDetailsModalEngineerProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => void;
+  onUpdateComplaint: (updatedComplaint: Complaint) => Promise<void>; // Make async for service call
 }
 
 const engineerAllowedStatuses: ComplaintStatus[] = [
@@ -53,10 +54,15 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
 
   if (!complaint) return null;
 
-  const isTerminalStatusForEngineer = [ComplaintStatus.Closed, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Submitted].includes(complaint.status);
+  const isTerminalStatusForEngineer = [
+      ComplaintStatus.Closed, 
+      ComplaintStatus.Escalated, 
+      ComplaintStatus.PendingAssignment, 
+      ComplaintStatus.Submitted
+    ].includes(complaint.status);
 
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!engineerUser) {
         toast({ title: "Error", description: "User not found. Cannot save changes.", variant: "destructive"});
         return;
@@ -64,18 +70,18 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
 
     let updatedResolvedAt: Date | undefined = complaint.resolvedAt;
     if (selectedStatus === ComplaintStatus.Resolved && complaint.status !== ComplaintStatus.Resolved) {
-      updatedResolvedAt = new Date();
-    } else if (selectedStatus !== ComplaintStatus.Resolved) {
-      // Clear resolvedAt if status is changed from Resolved to something else
+      updatedResolvedAt = new Date(); // Set client-side, service might use serverTimestamp
+    } else if (selectedStatus !== ComplaintStatus.Resolved && complaint.resolvedAt) {
+      // Clear resolvedAt if status is changed from Resolved to something else by engineer
       updatedResolvedAt = undefined;
     }
     
-    const updatedComplaint: Complaint = {
+    const updatedComplaintData: Complaint = {
       ...complaint,
       status: selectedStatus || complaint.status,
       resolutionDetails: resolutionDetails, 
       resolvedAt: updatedResolvedAt,
-      updatedAt: new Date(),
+      // updatedAt is handled by the service
       internalNotes: internalNote ? [
         ...(complaint.internalNotes || []),
         { 
@@ -83,12 +89,12 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
             userId: engineerUser.id, 
             userName: engineerUser.name, 
             text: internalNote, 
-            timestamp: new Date(), 
+            timestamp: new Date(), // Client time, or let service handle
             isInternal: true 
         }
       ] : complaint.internalNotes,
     };
-    onUpdateComplaint(updatedComplaint);
+    await onUpdateComplaint(updatedComplaintData);
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated by ${engineerUser.name}.` });
     onClose();
   };
@@ -112,7 +118,12 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
-                  <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
+                  <div className="flex items-center">
+                    <strong>Priority:</strong>&nbsp;
+                    <Badge variant={complaint.priority === ComplaintPriority.High || complaint.priority === ComplaintPriority.Escalated ? "destructive" : "secondary"} className="ml-1">
+                        {complaint.priority || "N/A"}
+                    </Badge>
+                  </div>
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
@@ -155,7 +166,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                    <div>
                     <Label htmlFor="status">Update Status</Label>
                     <Select 
-                        value={selectedStatus} 
+                        value={selectedStatus || ""} 
                         disabled={isTerminalStatusForEngineer} 
                         onValueChange={(value) => setSelectedStatus(value as ComplaintStatus)}
                     >
@@ -217,4 +228,3 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     </Dialog>
   );
 }
-

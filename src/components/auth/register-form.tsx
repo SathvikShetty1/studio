@@ -1,9 +1,11 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +23,9 @@ import type { User } from "@/types";
 import { UserRole, EngineerLevel } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { mockUsers } from '@/lib/mock-data';
+import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserDetails, getUserById } from '@/services/userService';
 
 
 const formSchema = z.object({
@@ -42,6 +46,7 @@ const formSchema = z.object({
 export function RegisterForm() {
   const { toast } = useToast();
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -56,35 +61,60 @@ export function RegisterForm() {
 
   const selectedRole = form.watch("role");
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    const existingUser = mockUsers.find(u => u.email === values.email);
-    if (existingUser) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsLoading(true);
+    try {
+      // Check if user already exists in Firestore (optional, Firebase Auth will also check email uniqueness)
+      // const existingFirestoreUser = await getUserByEmail(values.email); // This function would need to be created in userService if needed.
+      // For now, rely on Firebase Auth's uniqueness check for email.
+
+      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      const firebaseUser = userCredential.user;
+
+      const userDetails: Omit<User, 'id'> = {
+        name: values.name,
+        email: values.email,
+        role: values.role,
+        avatar: `https://picsum.photos/seed/${values.email}/40/40`, // Keep placeholder avatar
+        ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
+      };
+
+      const detailsStored = await createUserDetails(firebaseUser.uid, userDetails);
+
+      if (!detailsStored) {
+        // Handle case where Firestore user details creation failed. 
+        // Might need to delete the Firebase Auth user or prompt admin intervention.
+        toast({
+          title: "Registration Partially Failed",
+          description: "Account created, but failed to save all details. Please contact support.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      toast({
+        title: "Registration Successful!",
+        description: `User ${values.name} created as a ${values.role}${values.role === UserRole.Engineer ? ` (${values.engineerLevel})` : ''}. You can now log in.`,
+      });
+      router.push('/login');
+
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      let errorMessage = "An unexpected error occurred during registration.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "This email address is already in use. Please try another.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "The password is too weak. Please choose a stronger password.";
+      }
       toast({
         title: "Registration Failed",
-        description: "An account with this email already exists.",
+        description: errorMessage,
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    const newUser: User = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      name: values.name,
-      email: values.email,
-      role: values.role,
-      avatar: `https://picsum.photos/seed/${values.email}/40/40`,
-      ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
-    };
-
-    // Directly mutate the imported mockUsers array
-    const usersStore = require('@/lib/mock-data').mockUsers;
-    usersStore.push(newUser);
-
-    toast({
-      title: "Registration Successful!",
-      description: `User ${values.name} created as a ${values.role}${values.role === UserRole.Engineer ? ` (${values.engineerLevel})` : ''}. You can now log in.`,
-    });
-    router.push('/login');
   }
 
   return (
@@ -162,8 +192,8 @@ export function RegisterForm() {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={UserRole.Customer}>Customer</SelectItem>
-                      <SelectItem value={UserRole.Admin}>Admin (Demo)</SelectItem>
-                      <SelectItem value={UserRole.Engineer}>Engineer (Demo)</SelectItem>
+                      <SelectItem value={UserRole.Admin}>Admin</SelectItem>
+                      <SelectItem value={UserRole.Engineer}>Engineer</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -194,7 +224,9 @@ export function RegisterForm() {
                 )}
               />
             )}
-            <Button type="submit" className="w-full">Register</Button>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Registering..." : "Register"}
+            </Button>
           </form>
         </Form>
       </CardContent>

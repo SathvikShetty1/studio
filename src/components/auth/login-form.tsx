@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,17 +19,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { UserRole } from "@/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Added Select
+// UserRole and Select for role selection are removed as role is now part of user data in Firestore
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  role: z.nativeEnum(UserRole).optional(), // Role selection for easy testing
+  // role: z.nativeEnum(UserRole).optional(), // Role selection for easy testing - REMOVED
 });
 
 export function LoginForm() {
-  const { login } = useAuth();
+  const { login, isLoading } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -39,17 +39,18 @@ export function LoginForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    const success = login(values.email, values.role); // Pass role if selected
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    const success = await login(values.email, values.password);
     if (success) {
       toast({
         title: "Login Successful",
         description: `Welcome back! Redirecting to your dashboard...`,
       });
+      // Navigation is handled by AuthProvider's useEffect
     } else {
       toast({
         title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
+        description: "Invalid email or password, or user details not found. Please try again or register.",
         variant: "destructive",
       });
     }
@@ -90,29 +91,10 @@ export function LoginForm() {
                 </FormItem>
               )}
             />
-             <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Login As (For Demo)</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role to login as" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value={UserRole.Customer}>Customer</SelectItem>
-                      <SelectItem value={UserRole.Admin}>Admin</SelectItem>
-                      <SelectItem value={UserRole.Engineer}>Engineer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full">Login</Button>
+            {/* Role selection for demo removed */}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Logging in..." : "Login"}
+            </Button>
           </form>
         </Form>
       </CardContent>

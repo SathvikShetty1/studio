@@ -4,49 +4,60 @@
 import { useState, useEffect } from 'react';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { mockComplaints as initialMockComplaints } from '@/lib/mock-data';
 import { ComplaintTableAdmin } from '@/components/admin/complaint-table-admin';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, ListChecks, Users, ChevronsUp } from 'lucide-react'; // Added ChevronsUp for Escalated
+import { AlertTriangle, CheckCircle, ListChecks, Users, ChevronsUp } from 'lucide-react';
 import { ComplaintStatus } from '@/types';
+import { getAllComplaints, updateComplaint as updateComplaintService, deleteComplaint as deleteComplaintService } from '@/services/complaintService';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
-  // Initialize with a copy of the current state of initialMockComplaints
-  const [allComplaints, setAllComplaints] = useState<Complaint[]>(() => [...initialMockComplaints]);
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [allComplaints, setAllComplaints] = useState<Complaint[]>([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
 
-  // Effect to update `allComplaints` if the source array's content (any complaint object) changes,
-  // or if its length changes (e.g., new complaint added/deleted).
+  const fetchComplaintsData = async () => {
+    setIsLoadingComplaints(true);
+    const complaintsData = await getAllComplaints();
+    setAllComplaints(complaintsData);
+    setIsLoadingComplaints(false);
+  };
+  
   useEffect(() => {
-    // This creates a shallow copy. If mockComplaints objects are mutated directly elsewhere,
-    // this might not pick up changes if the array reference itself or length doesn't change.
-    // A more robust way would be to deep compare or use a version/timestamp if objects are complex.
-    // For this mock setup, we assume mockComplaints array itself is the source of truth that gets modified.
-    setAllComplaints([...initialMockComplaints]);
-  }, [initialMockComplaints, initialMockComplaints.length]); // React to additions/deletions and content changes if the array reference changes
+    if (!authLoading && user && user.role === 'admin') {
+      fetchComplaintsData();
+    }
+  }, [user, authLoading]);
 
-  const handleUpdateComplaint = (updatedComplaint: Complaint) => {
-    // Update the global mock data first
-    const index = initialMockComplaints.findIndex(c => c.id === updatedComplaint.id);
-    if (index !== -1) {
-      initialMockComplaints[index] = updatedComplaint;
-      // Trigger re-render by creating a new array reference for state
-      setAllComplaints([...initialMockComplaints]);
+  const handleUpdateComplaint = async (updatedComplaint: Complaint) => {
+    // Optimistically update UI, then sync with Firestore
+    const originalComplaints = [...allComplaints];
+    setAllComplaints(prev => prev.map(c => c.id === updatedComplaint.id ? updatedComplaint : c));
+    
+    const success = await updateComplaintService(updatedComplaint.id, updatedComplaint);
+    if (!success) {
+      setAllComplaints(originalComplaints); // Revert on failure
+      toast({ title: "Update Failed", description: "Could not update complaint in the database.", variant: "destructive"});
     } else {
-      // If somehow the complaint is new (should not happen via this handler)
-      initialMockComplaints.unshift(updatedComplaint);
-      setAllComplaints([...initialMockComplaints]);
+        // No need to re-fetch, optimistic update is likely fine or modal closes.
+        // If strict consistency needed, uncomment:
+        // await fetchComplaintsData(); 
     }
   };
 
-  const handleDeleteComplaint = (complaintId: string) => {
-    const newComplaintsList = initialMockComplaints.filter(c => c.id !== complaintId)
-    // Update global mock data first by replacing its contents
-    initialMockComplaints.length = 0; // Clear array
-    initialMockComplaints.push(...newComplaintsList); // Repopulate
-    
-    setAllComplaints([...initialMockComplaints]); // Update local state
+  const handleDeleteComplaint = async (complaintId: string) => {
+    const originalComplaints = [...allComplaints];
+    setAllComplaints(prev => prev.filter(c => c.id !== complaintId));
+
+    const success = await deleteComplaintService(complaintId);
+    if (!success) {
+      setAllComplaints(originalComplaints); // Revert on failure
+      toast({ title: "Delete Failed", description: "Could not delete complaint from the database.", variant: "destructive"});
+    } else {
+        toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} removed.`});
+    }
   };
   
   const stats = {
@@ -58,9 +69,8 @@ export default function AdminDashboardPage() {
     ).length,
     inProgress: allComplaints.filter(c => 
         c.status === ComplaintStatus.InProgress || 
-        c.status === ComplaintStatus.Assigned ||
-        c.status === ComplaintStatus.Escalated
-    ).length,
+        c.status === ComplaintStatus.Assigned
+    ).length, // Removed Escalated from here as it's its own stat
     resolved: allComplaints.filter(c => 
         c.status === ComplaintStatus.Resolved || 
         c.status === ComplaintStatus.Closed
@@ -69,8 +79,10 @@ export default function AdminDashboardPage() {
   };
 
 
+  if (authLoading || (isLoadingComplaints && user)) {
+    return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
+  }
   if (!user || user.role !== 'admin') {
-    // Should be handled by AuthProvider & layout, but as a safeguard:
     return <p className="p-4">Access Denied. You must be an admin to view this page.</p>;
   }
 
@@ -81,7 +93,7 @@ export default function AdminDashboardPage() {
         <p className="text-muted-foreground">Manage all customer complaints, assign tasks, and monitor resolution progress.</p>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5"> {/* Adjusted for 5 stats including escalated */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Complaints</CardTitle>
@@ -118,26 +130,27 @@ export default function AdminDashboardPage() {
             <div className="text-2xl font-bold">{stats.resolved}</div>
           </CardContent>
         </Card>
-         {stats.escalated > 0 && (
-          <Card className="border-destructive">
+         <Card className={stats.escalated > 0 ? "border-destructive" : ""}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-destructive">Escalated</CardTitle>
-              <ChevronsUp className="h-4 w-4 text-destructive" />
+              <CardTitle className={`text-sm font-medium ${stats.escalated > 0 ? "text-destructive": ""}`}>Escalated</CardTitle>
+              <ChevronsUp className={`h-4 w-4 ${stats.escalated > 0 ? "text-destructive" : "text-muted-foreground"}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">{stats.escalated}</div>
+              <div className={`text-2xl font-bold ${stats.escalated > 0 ? "text-destructive": ""}`}>{stats.escalated}</div>
             </CardContent>
           </Card>
-        )}
       </div>
 
       <Separator />
-
-      <ComplaintTableAdmin 
-        complaints={allComplaints} 
-        onUpdateComplaint={handleUpdateComplaint}
-        onDeleteComplaint={handleDeleteComplaint}
-      />
+      {isLoadingComplaints ? (
+        <p>Loading complaints table...</p>
+      ) : (
+        <ComplaintTableAdmin 
+          complaints={allComplaints} 
+          onUpdateComplaint={handleUpdateComplaint}
+          onDeleteComplaint={handleDeleteComplaint}
+        />
+      )}
     </div>
   );
 }

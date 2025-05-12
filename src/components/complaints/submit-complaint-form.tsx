@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,9 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Complaint } from "@/types";
-import { ComplaintCategory, ComplaintStatus } from "@/types";
-import { useAuth } from "@/hooks/use-auth";
+import type { Complaint, ComplaintAttachment } from '@/types';
+import { ComplaintCategory } from "@/types";
+// useAuth is removed, as user info should be passed by the parent page or retrieved via onComplaintSubmitted callback.
 import { UploadCloud } from "lucide-react";
 import { useState } from "react";
 
@@ -30,52 +31,47 @@ const formSchema = z.object({
   description: z.string().min(10, {
     message: "Description must be at least 10 characters.",
   }).max(2000, { message: "Description must not exceed 2000 characters."}),
-  attachments: z.any().optional(), // Placeholder for file uploads
+  attachments: z.any().optional(), 
 });
 
+// The props now expect a function that will handle the full complaint object creation
+// including customerId, customerName, etc., which are available on the parent page context.
 interface SubmitComplaintFormProps {
-  onComplaintSubmitted: (complaint: Complaint) => void;
+  onComplaintSubmitted: (data: Pick<Complaint, 'category' | 'description' | 'attachments'>) => void;
 }
 
 export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFormProps) {
-  const { user } = useAuth();
   const [fileName, setFileName] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
+      category: undefined, // Ensure category has a default or is explicitly set
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!user) {
-      // Handle case where user is not logged in, though AuthProvider should prevent this
-      alert("User not logged in!");
-      return;
-    }
-
-    const newComplaint: Complaint = {
-      id: `complaint-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      customerId: user.id,
-      customerName: user.name,
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    const complaintDataToPass: Pick<Complaint, 'category' | 'description' | 'attachments'> = {
       category: values.category,
       description: values.description,
-      submittedAt: new Date(),
-      updatedAt: new Date(),
-      status: ComplaintStatus.Submitted,
       attachments: fileName ? [{ id: `attach-${Date.now()}`, fileName: fileName, fileType: 'unknown', url: '#' }] : [],
     };
 
-    onComplaintSubmitted(newComplaint);
-    form.reset();
+    await onComplaintSubmitted(complaintDataToPass);
+    
+    form.reset({category: undefined, description: "", attachments: undefined});
     setFileName(null);
+    setIsSubmitting(false);
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setFileName(event.target.files[0].name);
-      // In a real app, you'd handle the upload here
+      // In a real app, you'd handle the upload here and get a URL
+      // For now, we're just storing the name.
     } else {
       setFileName(null);
     }
@@ -95,7 +91,7 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a complaint category" />
@@ -134,7 +130,7 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
             <FormField
               control={form.control}
               name="attachments"
-              render={({ field }) => ( // field is not directly used for file input value due to its nature
+              render={({ field }) => ( 
                 <FormItem>
                   <FormLabel>Supporting Documents/Images (Optional)</FormLabel>
                   <FormControl>
@@ -159,7 +155,9 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
                 </FormItem>
               )}
             />
-             <Button type="submit" className="w-full sm:w-auto">Submit Complaint</Button>
+             <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Submit Complaint"}
+            </Button>
           </form>
         </Form>
       </CardContent>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -5,8 +6,7 @@ import { SubmitComplaintForm } from '@/components/complaints/submit-complaint-fo
 import { ComplaintCard } from '@/components/complaints/complaint-card';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { mockComplaints as allMockComplaints } from '@/lib/mock-data';
-import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react'; // Added ShieldAlert
+import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -18,33 +18,55 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ComplaintStatus } from '@/types';
-
+import { addComplaint, getUserComplaints } from '@/services/complaintService';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CustomerDashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus[]>([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      // Simulate fetching user's complaints
-      const userComplaints = allMockComplaints.filter(c => c.customerId === user.id);
-      setMyComplaints(userComplaints);
+    async function fetchComplaints() {
+      if (user) {
+        setIsLoadingComplaints(true);
+        const userComplaints = await getUserComplaints(user.id);
+        setMyComplaints(userComplaints);
+        setIsLoadingComplaints(false);
+      }
     }
-  }, [user]);
+    if (!authLoading) {
+      fetchComplaints();
+    }
+  }, [user, authLoading]);
 
-  const handleComplaintSubmitted = (newComplaint: Complaint) => {
-    setMyComplaints(prev => [newComplaint, ...prev]);
-    allMockComplaints.unshift(newComplaint); // Add to global mock for other roles to see
-    setShowSubmitForm(false);
+  const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
+    const addedComplaint = await addComplaint(newComplaintData);
+    if (addedComplaint) {
+      setMyComplaints(prev => [addedComplaint, ...prev]);
+      setShowSubmitForm(false);
+      toast({
+          title: "Complaint Submitted!",
+          description: `Your complaint has been successfully submitted.`,
+      });
+    } else {
+      toast({
+          title: "Submission Failed",
+          description: "There was an error submitting your complaint. Please try again.",
+          variant: "destructive",
+      });
+    }
   };
   
   const filteredComplaints = myComplaints.filter(complaint => 
     statusFilter.length === 0 || statusFilter.includes(complaint.status)
   );
 
-  if (!user) return <p>Loading user data or please login.</p>;
+  if (authLoading || (isLoadingComplaints && user)) return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
+  if (!user) return <p>Please login to view your dashboard.</p>; // Should be handled by AuthProvider
 
   return (
     <div className="space-y-6">
@@ -64,7 +86,18 @@ export default function CustomerDashboardPage() {
       {showSubmitForm && (
         <div className="my-6">
           <h2 className="text-xl font-semibold mb-4">Submit a New Complaint</h2>
-          <SubmitComplaintForm onComplaintSubmitted={handleComplaintSubmitted} />
+          {/* Passing the function that calls the service */}
+          <SubmitComplaintForm onComplaintSubmitted={(data) => {
+             if (user) {
+                const fullData = {
+                    ...data,
+                    customerId: user.id,
+                    customerName: user.name,
+                    status: ComplaintStatus.Submitted, // Initial status
+                };
+                handleComplaintSubmitted(fullData);
+            }
+          }} />
           <Separator className="my-6" />
         </div>
       )}
@@ -105,7 +138,9 @@ export default function CustomerDashboardPage() {
         </DropdownMenu>
       </div>
 
-      {filteredComplaints.length > 0 ? (
+      {isLoadingComplaints ? (
+         <p>Loading complaints...</p>
+      ) : filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredComplaints.map(complaint => (
             <ComplaintCard key={complaint.id} complaint={complaint} />
