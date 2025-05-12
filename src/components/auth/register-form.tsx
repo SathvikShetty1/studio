@@ -25,7 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { auth } from '@/lib/firebase'; // Import Firebase auth
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { createUserDetails, getUserById } from '@/services/userService';
+import { createUserDetails } from '@/services/userService';
 
 
 const formSchema = z.object({
@@ -64,10 +64,6 @@ export function RegisterForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      // Check if user already exists in Firestore (optional, Firebase Auth will also check email uniqueness)
-      // const existingFirestoreUser = await getUserByEmail(values.email); // This function would need to be created in userService if needed.
-      // For now, rely on Firebase Auth's uniqueness check for email.
-
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       const firebaseUser = userCredential.user;
 
@@ -75,20 +71,20 @@ export function RegisterForm() {
         name: values.name,
         email: values.email,
         role: values.role,
-        avatar: `https://picsum.photos/seed/${values.email}/40/40`, // Keep placeholder avatar
+        avatar: `https://picsum.photos/seed/${values.email}/40/40`, 
         ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
       };
 
       const detailsStored = await createUserDetails(firebaseUser.uid, userDetails);
 
       if (!detailsStored) {
-        // Handle case where Firestore user details creation failed. 
-        // Might need to delete the Firebase Auth user or prompt admin intervention.
         toast({
           title: "Registration Partially Failed",
-          description: "Account created, but failed to save all details. Please contact support.",
+          description: "Account created, but failed to save all user details to the database. Please contact support.",
           variant: "destructive",
         });
+        // Optionally, consider deleting the Firebase Auth user here if Firestore write fails
+        // await firebaseUser.delete();
         setIsLoading(false);
         return;
       }
@@ -101,11 +97,27 @@ export function RegisterForm() {
 
     } catch (error: any) {
       console.error("Registration error:", error);
-      let errorMessage = "An unexpected error occurred during registration.";
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "This email address is already in use. Please try another.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "The password is too weak. Please choose a stronger password.";
+      let errorMessage = "An unexpected error occurred during registration. Please try again.";
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            errorMessage = "This email address is already in use. Please try another or log in.";
+            break;
+          case 'auth/weak-password':
+            errorMessage = "The password is too weak. Please choose a stronger password (at least 6 characters).";
+            break;
+          case 'auth/invalid-api-key':
+             errorMessage = "Firebase API Key is invalid. Please ensure your .env.local file is correctly configured with your Firebase project's API Key and that the development server has been restarted.";
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = "A network error occurred. Please check your internet connection and try again.";
+            break;
+          // Add more specific Firebase error codes as needed
+          default:
+            // For other Firebase errors, error.message might be more informative
+            errorMessage = error.message || errorMessage;
+            break;
+        }
       }
       toast({
         title: "Registration Failed",
