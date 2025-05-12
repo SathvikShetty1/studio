@@ -1,4 +1,3 @@
-
 'use server';
 import type { Complaint } from '@/types';
 import { db } from '@/lib/firebase';
@@ -105,7 +104,7 @@ export async function getUserComplaints(userId: string): Promise<Complaint[]> {
     const fetchedComplaints = complaintSnapshot.docs.map(docNode => {
       const rawData = docNode.data();
       // Log the raw customerId from the document to ensure it matches the queried userId
-      console.log(`[complaintService][getUserComplaints] Raw data for doc ${docNode.id} (Firestore customerId: ${rawData.customerId}):`, JSON.stringify(rawData));
+      console.log(`[complaintService][getUserComplaints] Raw data for doc ${docNode.id} (Firestore customerId: ${rawData.customerId}, assignedTo: ${rawData.assignedTo}):`, JSON.stringify(rawData));
       try {
         const converted = convertComplaintTimestamps({ id: docNode.id, ...rawData });
         return converted;
@@ -140,15 +139,38 @@ export async function getAllComplaints(): Promise<Complaint[]> {
 
 export async function getEngineerComplaints(engineerId: string): Promise<Complaint[]> {
   try {
+    if (typeof engineerId !== 'string' || engineerId.trim() === '') {
+      console.error("[complaintService][getEngineerComplaints] Invalid or empty engineerId provided:", engineerId);
+      return [];
+    }
     const complaintsCol = collection(db, 'complaints');
     // Ensure the query uses 'assignedTo' which is the field for engineer ID
     const q = query(complaintsCol, where('assignedTo', '==', engineerId), orderBy('updatedAt', 'desc'));
-    console.log(`[complaintService][getEngineerComplaints] Executing query for engineerId (assignedTo field): ${engineerId}`);
+    console.log(`[complaintService][getEngineerComplaints] Executing query for engineerId (assignedTo field): "${engineerId}"`);
     const complaintSnapshot = await getDocs(q);
-    console.log(`[complaintService][getEngineerComplaints] Query for engineer ${engineerId} found ${complaintSnapshot.size} documents.`);
-    return complaintSnapshot.docs.map(docNode => convertComplaintTimestamps({ id: docNode.id, ...docNode.data() }));
+    console.log(`[complaintService][getEngineerComplaints] Firestore query for engineer "${engineerId}" returned ${complaintSnapshot.size} documents. Is empty: ${complaintSnapshot.empty}`);
+    
+    if (complaintSnapshot.empty) {
+      return [];
+    }
+
+    const fetchedComplaints = complaintSnapshot.docs.map(docNode => {
+      const rawData = docNode.data();
+      console.log(`[complaintService][getEngineerComplaints] Raw data for doc ${docNode.id} (assignedTo: ${rawData.assignedTo}):`, JSON.stringify(rawData));
+      try {
+        const converted = convertComplaintTimestamps({ id: docNode.id, ...rawData });
+        return converted;
+      } catch (e) {
+        console.error(`[complaintService][getEngineerComplaints] Error converting document ${docNode.id}:`, e, "Raw data was:", rawData);
+        return null;
+      }
+    }).filter(complaint => complaint !== null) as Complaint[];
+    
+    console.log(`[complaintService][getEngineerComplaints] Successfully processed and returning ${fetchedComplaints.length} complaints for engineer "${engineerId}".`);
+    return fetchedComplaints;
+
   } catch (error) {
-    console.error("[complaintService][getEngineerComplaints] Error fetching engineer complaints for ID " + engineerId + ":", error);
+    console.error(`[complaintService][getEngineerComplaints] General error fetching complaints for engineer ID "${engineerId}":`, error);
     return [];
   }
 }
@@ -196,4 +218,3 @@ export async function getComplaintById(complaintId: string): Promise<Complaint |
     return null;
   }
 }
-

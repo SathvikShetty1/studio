@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -21,47 +20,71 @@ export default function EngineerDashboardPage() {
   const fetchAssignedComplaints = async () => {
     if (user && user.id) { // Ensure user and user.id are available
       setIsLoadingComplaints(true);
-      console.log(`[EngineerDashboardPage] Fetching complaints for engineer ID: ${user.id}`);
+      console.log(`[EngineerDashboardPage][fetchAssignedComplaints] Attempting to fetch complaints for engineer ID (user.id): ${user.id}`);
       try {
         const engineerComplaints = await getEngineerComplaints(user.id);
-        console.log(`[EngineerDashboardPage] Received ${engineerComplaints.length} complaints for engineer ${user.id}:`, engineerComplaints);
-        setAssignedComplaints(engineerComplaints);
+        console.log(`[EngineerDashboardPage][fetchAssignedComplaints] getEngineerComplaints returned (raw):`, JSON.stringify(engineerComplaints, null, 2), "Count:", engineerComplaints.length);
+        
+        if (Array.isArray(engineerComplaints)) {
+          const validComplaints = engineerComplaints.filter(c => c && typeof c.id === 'string');
+           if(validComplaints.length !== engineerComplaints.length) {
+              console.warn("[EngineerDashboardPage][fetchAssignedComplaints] Some complaints were filtered out due to missing ID or being null. Original count:", engineerComplaints.length, "Valid count:", validComplaints.length);
+          }
+          setAssignedComplaints(validComplaints);
+        } else {
+          console.error("[EngineerDashboardPage][fetchAssignedComplaints] getEngineerComplaints did not return an array. Received:", engineerComplaints);
+          setAssignedComplaints([]);
+           toast({
+              title: "Data Error",
+              description: "Received unexpected data format for assigned complaints.",
+              variant: "destructive",
+          });
+        }
       } catch (error) {
-        console.error(`[EngineerDashboardPage] Error fetching complaints for engineer ${user.id}:`, error);
+        console.error(`[EngineerDashboardPage][fetchAssignedComplaints] Error during fetch for engineer ${user.id}:`, error);
         toast({ title: "Error", description: "Could not fetch your assigned complaints.", variant: "destructive" });
-        setAssignedComplaints([]); // Set to empty array on error
+        setAssignedComplaints([]); 
       } finally {
         setIsLoadingComplaints(false);
+        console.log("[EngineerDashboardPage][fetchAssignedComplaints] Finished fetching. isLoadingComplaints set to false.");
       }
     } else {
-      console.warn("[EngineerDashboardPage] User or user.id not available for fetching complaints.");
-      setIsLoadingComplaints(false); // Ensure loading state is reset
-      setAssignedComplaints([]); // Ensure complaints are empty if no user
+      console.warn("[EngineerDashboardPage][fetchAssignedComplaints] User or user.id not available. Skipping fetch.");
+      setIsLoadingComplaints(false); 
+      setAssignedComplaints([]); 
     }
   };
 
   useEffect(() => {
     if (!authLoading && user && user.role === 'engineer') {
+      console.log("[EngineerDashboardPage][useEffect] Auth loaded. Engineer user identified:", JSON.stringify(user, null, 2));
       fetchAssignedComplaints();
+    } else if (!authLoading && user && user.role !== 'engineer') {
+      console.warn("[EngineerDashboardPage][useEffect] Auth loaded, but user is not an engineer. Role:", user.role);
+      setIsLoadingComplaints(false);
+      setAssignedComplaints([]);
+    } else if (authLoading) {
+      console.log("[EngineerDashboardPage][useEffect] Auth still loading...");
+    } else if (!user) {
+      console.warn("[EngineerDashboardPage][useEffect] Auth loaded, but no user object found.");
+      setIsLoadingComplaints(false);
+      setAssignedComplaints([]);
     }
-  }, [user, authLoading]); // user.id is not needed here as user object change will trigger it
+  }, [user, authLoading]);
 
   const handleUpdateComplaint = async (updatedComplaint: Complaint) => {
     const originalComplaints = [...assignedComplaints];
-    // Optimistically update UI
     setAssignedComplaints(prevComplaints =>
       prevComplaints.map(c => (c.id === updatedComplaint.id ? updatedComplaint : c))
     );
     
     const success = await updateComplaintService(updatedComplaint.id, updatedComplaint);
     if (!success) {
-      setAssignedComplaints(originalComplaints); // Revert on failure
+      setAssignedComplaints(originalComplaints); 
       toast({ title: "Update Failed", description: "Could not update complaint in the database.", variant: "destructive"});
     } else {
-      // Re-fetch to ensure data consistency, especially if status change might affect filtering
-      // For engineer, updating often means it's resolved or needs admin attention, so re-fetch is good.
+      // Re-fetch to ensure data consistency.
       await fetchAssignedComplaints(); 
-      // toast({ title: "Complaint Updated", description: `Complaint #${updatedComplaint.id.slice(-6)} updated.`});
     }
   };
     
@@ -122,7 +145,7 @@ export default function EngineerDashboardPage() {
       </div>
 
       <Separator />
-      {isLoadingComplaints ? (
+      {isLoadingComplaints && !authLoading ? (
         <p>Loading assigned complaints...</p>
       ) : (
         <ComplaintTableEngineer 
@@ -133,4 +156,3 @@ export default function EngineerDashboardPage() {
     </div>
   );
 }
-
