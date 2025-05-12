@@ -10,36 +10,30 @@ import { useToast } from '@/hooks/use-toast';
 import { addComplaint } from '@/services/complaintService'; // Import the service
 
 export default function SubmitComplaintPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, firebaseUser, isLoading: authLoading } = useAuth(); // Add firebaseUser
   const router = useRouter();
   const { toast } = useToast();
-
-  // This page essentially duplicates functionality in CustomerDashboardPage if that page shows the form inline.
-  // Consider if this dedicated page is still needed or if form should only be on dashboard.
-  // For now, I'll keep it and make it work.
 
   if (authLoading) {
     return <div className="flex items-center justify-center h-screen"><p>Loading...</p></div>;
   }
 
-  if (!user) {
-    // This should ideally be handled by the AuthProvider redirecting
-    // but as a fallback:
+  if (!firebaseUser) { // Check firebaseUser for auth status
     if (typeof window !== 'undefined') router.push('/login');
     return <p>Redirecting to login...</p>;
   }
 
   const handleComplaintSubmitted = async (complaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt' | 'customerId' | 'customerName' | 'status'>) => {
-    if (!user) {
-        toast({ title: "Error", description: "You must be logged in to submit a complaint.", variant: "destructive"});
+    // user from useAuth is for Firestore data (name, role). firebaseUser is for Auth (uid).
+    if (!firebaseUser || !firebaseUser.uid || !user || !user.name) { 
+        toast({ title: "Error", description: "User details incomplete. Please ensure you are fully logged in.", variant: "destructive"});
         return;
     }
     const fullComplaintData = {
         ...complaintData,
-        customerId: user.id,
-        customerName: user.name,
+        customerId: firebaseUser.uid, // Use firebaseUser.uid
+        customerName: user.name, // Use user.name from Firestore data
         status: ComplaintStatus.Submitted,
-        // submittedAt and updatedAt will be handled by serverTimestamp in addComplaint
     };
 
     const addedComplaint = await addComplaint(fullComplaintData);
@@ -49,7 +43,7 @@ export default function SubmitComplaintPage() {
             title: "Complaint Submitted!",
             description: `Your complaint #${addedComplaint.id.slice(-6)} has been successfully submitted.`,
         });
-        router.push('/dashboard/customer'); // Redirect to customer dashboard after submission
+        router.push('/dashboard/customer'); 
     } else {
         toast({
             title: "Submission Failed",
