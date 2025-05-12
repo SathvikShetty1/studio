@@ -65,12 +65,17 @@ export async function getUserComplaints(userId: string): Promise<Complaint[]> {
     }
     
     return complaintSnapshot.docs.map(docNode => {
-      const data = docNode.data();
-      // console.log(`[complaintService] Raw data for doc ${docNode.id}:`, JSON.stringify(data, null, 2));
-      const converted = convertComplaintTimestamps({ id: docNode.id, ...data });
-      // console.log(`[complaintService] Converted data for doc ${docNode.id}:`, JSON.stringify(converted, null, 2));
-      return converted;
-    });
+      try {
+        const data = docNode.data();
+        // console.log(`[complaintService] Raw data for doc ${docNode.id}:`, JSON.stringify(data, null, 2));
+        const converted = convertComplaintTimestamps({ id: docNode.id, ...data });
+        // console.log(`[complaintService] Converted data for doc ${docNode.id}:`, JSON.stringify(converted, null, 2));
+        return converted;
+      } catch (e) {
+        console.error(`[complaintService] Error converting document ${docNode.id} during getUserComplaints:`, e);
+        return null; // Return null for problematic documents
+      }
+    }).filter(complaint => complaint !== null) as Complaint[]; // Filter out any nulls that resulted from conversion errors
   } catch (error) {
     console.error("[complaintService] Error fetching user complaints for ID " + userId + ":", error);
     return [];

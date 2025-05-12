@@ -31,14 +31,15 @@ export default function CustomerDashboardPage() {
   useEffect(() => {
     async function fetchComplaints() {
       if (user && user.id) {
-        console.log("[CustomerDashboardPage] Fetching complaints for user.id:", user.id);
+        console.log("[CustomerDashboardPage][useEffect] Fetching complaints for user.id:", user.id);
         setIsLoadingComplaints(true);
+        let userComplaints: Complaint[] = [];
         try {
-          const userComplaints = await getUserComplaints(user.id);
-          console.log("[CustomerDashboardPage] Received complaints:", JSON.stringify(userComplaints, null, 2));
+          userComplaints = await getUserComplaints(user.id);
+          console.log("[CustomerDashboardPage][useEffect] Received complaints from service:", JSON.stringify(userComplaints, null, 2), "Count:", userComplaints.length);
           setMyComplaints(userComplaints);
         } catch (error) {
-          console.error("[CustomerDashboardPage] Failed to fetch user complaints:", error);
+          console.error("[CustomerDashboardPage][useEffect] Failed to fetch user complaints:", error);
           setMyComplaints([]); 
           toast({
             title: "Error Fetching Complaints",
@@ -46,26 +47,26 @@ export default function CustomerDashboardPage() {
             variant: "destructive",
           });
         } finally {
-          setIsLoadingComplaints(false);
+          setIsLoadingComplaints(false); 
         }
       } else if (!authLoading && !user) {
-        console.log("[CustomerDashboardPage] No user or user.id, clearing complaints.");
+        console.log("[CustomerDashboardPage][useEffect] No user or user.id, clearing complaints.");
         setMyComplaints([]);
         setIsLoadingComplaints(false);
       } else if (!authLoading && user && !user.id) {
-        console.warn("[CustomerDashboardPage] User object exists but user.id is missing:", user);
+        console.warn("[CustomerDashboardPage][useEffect] User object exists but user.id is missing:", user);
         setMyComplaints([]);
         setIsLoadingComplaints(false);
       }
     }
 
     if (!authLoading) {
-      console.log("[CustomerDashboardPage] Auth loading finished. User:", user ? user.id : 'No user');
+      console.log("[CustomerDashboardPage][useEffect] Auth loading finished. User:", user ? user.id : 'No user', "Role:", user?.role);
       fetchComplaints();
     } else {
-      console.log("[CustomerDashboardPage] Auth still loading...");
+      console.log("[CustomerDashboardPage][useEffect] Auth still loading...");
     }
-  }, [user, authLoading]); 
+  }, [user, authLoading, toast]); 
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     const addedComplaint = await addComplaint(newComplaintData);
@@ -89,7 +90,13 @@ export default function CustomerDashboardPage() {
     statusFilter.length === 0 || statusFilter.includes(complaint.status)
   );
 
-  if (authLoading || (isLoadingComplaints && user)) return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
+  if (authLoading || (isLoadingComplaints && user)) {
+    console.log("[CustomerDashboardPage][Render] Showing loading dashboard screen (authLoading || (isLoadingComplaints && user))...");
+    return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
+  }
+  
+  console.log("[CustomerDashboardPage][Render] Page rendering. authLoading:", authLoading, "isLoadingComplaints:", isLoadingComplaints, "user:", user?.id, "myComplaints count:", myComplaints.length);
+
 
   return (
     <div className="space-y-6">
