@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -9,7 +10,7 @@ import {
   Settings,
   Briefcase,
   ShieldAlert,
-  Bot,
+  // Bot, // Removed Bot icon
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -46,7 +47,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/customer/submit", icon: FilePlus2, label: "New Complaint", roles: [UserRole.Customer] },
   { href: "/dashboard/admin", icon: LayoutDashboard, label: "Admin Dashboard", roles: [UserRole.Admin] },
   { href: "/dashboard/admin/manage-users", icon: Users, label: "Manage Users", roles: [UserRole.Admin] },
-  { href: "/dashboard/admin/ai-tools", icon: Bot, label: "AI Tools", roles: [UserRole.Admin] },
+  // { href: "/dashboard/admin/ai-tools", icon: Bot, label: "AI Tools", roles: [UserRole.Admin] }, // Removed AI Tools
   { href: "/dashboard/engineer", icon: Briefcase, label: "My Tasks", roles: [UserRole.Engineer] },
   { href: "/dashboard/settings", icon: Settings, label: "Settings", roles: [UserRole.Customer, UserRole.Admin, UserRole.Engineer] },
 ];

@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldAlert, FileText, Users, Lightbulb } from "lucide-react";
+import { ShieldAlert, FileText, Users } from "lucide-react"; // Removed Lightbulb
 import Link from "next/link";
 import Image from "next/image";
 
@@ -38,7 +38,7 @@ export default function LandingPage() {
                   </h1>
                   <p className="max-w-[600px] mx-auto text-muted-foreground md:text-xl">
                     Complaint Central offers a robust platform for customers to voice concerns and for businesses to
-                    manage, track, and resolve issues efficiently. Powered by AI for smarter triage.
+                    manage, track, and resolve issues efficiently.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
@@ -72,7 +72,7 @@ export default function LandingPage() {
                 </p>
               </div>
             </div>
-            <div className="mx-auto grid max-w-5xl items-start gap-8 sm:grid-cols-2 md:gap-12 lg:grid-cols-3 lg:gap-16 mt-12">
+            <div className="mx-auto grid max-w-5xl items-start gap-8 sm:grid-cols-1 md:grid-cols-2 lg:gap-16 mt-12">
               <Card className="shadow-lg hover:shadow-xl transition-shadow">
                 <CardHeader className="flex flex-row items-center gap-4 pb-2">
                   <FileText className="w-8 h-8 text-accent" />
@@ -89,15 +89,6 @@ export default function LandingPage() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription>Secure access for customers, admins, and engineers with tailored dashboards.</CardDescription>
-                </CardContent>
-              </Card>
-              <Card className="shadow-lg hover:shadow-xl transition-shadow">
-                <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                  <Lightbulb className="w-8 h-8 text-accent" />
-                  <CardTitle>AI-Powered Triage</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>Intelligent suggestions for complaint category and priority to speed up resolution.</CardDescription>
                 </CardContent>
               </Card>
             </div>
@@ -118,4 +109,3 @@ export default function LandingPage() {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -17,12 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AITriageSection } from './ai-triage-section';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useAuth } from '@/hooks/use-auth';
 
 interface ComplaintDetailsModalAdminProps {
@@ -149,21 +149,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriorityEnum.Escalated}.` });
   };
 
-  const handleSuggestionApplied = (suggestion: { category: ComplaintCategory; priority: ComplaintPriorityEnum }) => {
-    setSelectedPriority(suggestion.priority);
-    // Category update is handled by onUpdateComplaint if needed, here we only set priority from AI
-    const updatedComplaintWithAI: Complaint = {
-      ...complaint,
-      category: suggestion.category, 
-      priority: suggestion.priority,
-      aiSuggestedCategory: suggestion.category,
-      aiSuggestedPriority: suggestion.priority,
-      aiReasoning: 'AI suggestion applied by admin.', 
-      updatedAt: new Date(),
-    };
-    onUpdateComplaint(updatedComplaintWithAI);
-    toast({ title: "AI Suggestion Applied", description: `Priority set to ${suggestion.priority}. Category set to ${suggestion.category}.` });
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -208,13 +193,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   )}
                 </CardContent>
               </Card>
-
-              <AITriageSection
-                complaintDescription={complaint.description}
-                currentCategory={complaint.category}
-                currentPriority={complaint.priority}
-                onSuggestionApplied={handleSuggestionApplied}
-              />
             </div>
 
             <div className="space-y-4">
@@ -235,7 +213,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
                   <div>
                     <Label htmlFor="assignee">Assign to Engineer</Label>
-                    <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
+                    <Select value={selectedEngineerId || UNASSIGNED_VALUE} onValueChange={setSelectedEngineerId}>
                       <SelectTrigger id="assignee">
                         <SelectValue placeholder="Select engineer" />
                       </SelectTrigger>
@@ -297,4 +275,3 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
-

@@ -1,3 +1,4 @@
+
 import type { EngineerLevel } from './user';
 
 export enum ComplaintCategory {
@@ -62,8 +63,4 @@ export interface Complaint {
     rating: number; // e.g., 1-5 stars
     comment?: string;
   };
-  aiSuggestedCategory?: ComplaintCategory;
-  aiSuggestedPriority?: ComplaintPriority;
-  aiReasoning?: string;
 }
-
