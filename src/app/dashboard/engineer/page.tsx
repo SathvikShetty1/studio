@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -6,8 +7,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { ComplaintTableEngineer } from '@/components/engineer/complaint-table-engineer';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, ListChecks, RefreshCw } from 'lucide-react';
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types';
+import { AlertTriangle, CheckCircle, ListChecks, RefreshCw, Inbox } from 'lucide-react';
+import { ComplaintStatus } from '@/types';
 import { getEngineerComplaints, updateComplaint as updateComplaintService } from '@/services/complaintService';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -75,7 +76,7 @@ export default function EngineerDashboardPage() {
       setIsLoadingComplaints(false);
       setAssignedComplaints([]);
     }
-  }, [user, authLoading]); // Removed toast from dependencies as it's stable
+  }, [user, authLoading]);
 
   const handleUpdateComplaint = async (updatedComplaint: Complaint) => {
     const originalComplaints = [...assignedComplaints];
@@ -88,7 +89,7 @@ export default function EngineerDashboardPage() {
       setAssignedComplaints(originalComplaints); 
       toast({ title: "Update Failed", description: "Could not update complaint in the database.", variant: "destructive"});
     } else {
-      // Re-fetch to ensure data consistency.
+      // Re-fetch to ensure data consistency after an update.
       await fetchAssignedComplaints(); 
     }
   };
@@ -120,9 +121,9 @@ export default function EngineerDashboardPage() {
           <h1 className="text-2xl font-semibold">My Assigned Complaints</h1>
           <p className="text-muted-foreground">Update status and manage resolutions for your assigned customer complaints.</p>
         </div>
-        <Button onClick={fetchAssignedComplaints} disabled={isRefreshing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh Complaints'}
+        <Button onClick={fetchAssignedComplaints} disabled={isRefreshing || isLoadingComplaints}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing || isLoadingComplaints ? 'animate-spin' : ''}`} />
+          {isRefreshing || isLoadingComplaints ? 'Refreshing...' : 'Refresh Complaints'}
         </Button>
       </div>
          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -156,13 +157,29 @@ export default function EngineerDashboardPage() {
       </div>
 
       <Separator />
-      {(isLoadingComplaints && !isRefreshing) ? (
-        <p>Loading assigned complaints...</p>
-      ) : (
+      { (isLoadingComplaints && !isRefreshing) ? (
+        <div className="flex items-center justify-center py-10">
+            <p>Loading assigned complaints...</p>
+        </div>
+      ) : assignedComplaints.length > 0 ? (
         <ComplaintTableEngineer 
           complaints={assignedComplaints} 
           onUpdateComplaint={handleUpdateComplaint}
         />
+      ) : (
+        <div className="text-center py-10 border rounded-md shadow-sm">
+          <Inbox className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-medium text-foreground">
+            No Complaints Assigned
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You currently have no complaints assigned to you.
+          </p>
+          <Button onClick={fetchAssignedComplaints} disabled={isRefreshing || isLoadingComplaints} className="mt-4">
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing || isLoadingComplaints ? 'animate-spin' : ''}`} />
+             Check for New Assignments
+          </Button>
+        </div>
       )}
     </div>
   );

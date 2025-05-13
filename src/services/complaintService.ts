@@ -1,3 +1,4 @@
+
 'use server';
 import type { Complaint } from '@/types';
 import { db } from '@/lib/firebase';
@@ -156,7 +157,7 @@ export async function getEngineerComplaints(engineerId: string): Promise<Complai
 
     const fetchedComplaints = complaintSnapshot.docs.map(docNode => {
       const rawData = docNode.data();
-      console.log(`[complaintService][getEngineerComplaints] Raw data for doc ${docNode.id} (assignedTo: ${rawData.assignedTo}):`, JSON.stringify(rawData));
+      console.log(`[complaintService][getEngineerComplaints] Raw data for doc ${docNode.id} (assignedTo: ${rawData.assignedTo}, assignedToName: ${rawData.assignedToName}):`, JSON.stringify(rawData));
       try {
         const converted = convertComplaintTimestamps({ id: docNode.id, ...rawData });
         return converted;
