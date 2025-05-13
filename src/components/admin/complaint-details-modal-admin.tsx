@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -29,7 +28,7 @@ interface ComplaintDetailsModalAdminProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => Promise<void>; // Make async for service call
+  onUpdateComplaint: (updatedComplaint: Complaint) => Promise<void>;
 }
 
 const UNASSIGNED_VALUE = "_UNASSIGNED_";
@@ -53,7 +52,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       setAllEngineers(engineers);
       setIsLoadingEngineers(false);
     }
-    if (isOpen) { // Fetch engineers when modal opens
+    if (isOpen) {
       fetchEngineers();
     }
   }, [isOpen]);
@@ -75,9 +74,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else { 
-             // Already at executive, can only assign to other executives or stay with current one if no others
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-            if (displayEngineers.length === 0) { // If no *other* executives, list all executives including current
+            if (displayEngineers.length === 0) {
                  displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
             }
           }
@@ -99,17 +97,19 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
     if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted || complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated)) {
       updatedStatus = ComplaintStatus.Assigned;
+    } else if (!finalSelectedEngineerId && complaint.status === ComplaintStatus.Assigned) {
+      // If unassigning, move back to PendingAssignment, unless admin manually changes it further
+      updatedStatus = ComplaintStatus.PendingAssignment;
     }
 
 
     const updatedComplaintData: Complaint = {
       ...complaint,
       priority: selectedPriority,
-      assignedTo: finalSelectedEngineerId,
-      assignedToName: assignedEngineer?.name,
-      currentHandlerLevel: assignedEngineer?.engineerLevel,
+      assignedTo: finalSelectedEngineerId, // This will be undefined if UNASSIGNED_VALUE
+      assignedToName: assignedEngineer?.name, // Undefined if no engineer or unassigned
+      currentHandlerLevel: assignedEngineer?.engineerLevel, // Undefined if no engineer or unassigned
       status: updatedStatus,
-      // updatedAt is handled by the service
       internalNotes: internalNote && adminUser ? [
         ...(complaint.internalNotes || []),
         { 
@@ -117,12 +117,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           userId: adminUser.id, 
           userName: adminUser.name, 
           text: internalNote, 
-          timestamp: new Date(), // Will be converted to serverTimestamp by service if desired, or keep client time
+          timestamp: new Date(),
           isInternal: true 
         }
       ] : complaint.internalNotes,
     };
-    await onUpdateComplaint(updatedComplaintData); // Call the passed update handler
+    await onUpdateComplaint(updatedComplaintData);
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
     onClose();
   };
@@ -131,15 +131,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     if (!adminUser) return;
 
     let newStatus = ComplaintStatus.Escalated;
-    if (complaint.status === ComplaintStatus.Resolved) { // Admin can escalate even resolved issues
+    if (complaint.status === ComplaintStatus.Resolved) {
         newStatus = ComplaintStatus.Escalated; 
     }
 
     const escalatedComplaintData: Complaint = {
       ...complaint,
       status: newStatus, 
-      priority: ComplaintPriority.Escalated, 
-      // updatedAt handled by service
+      priority: ComplaintPriority.Escalated,
       internalNotes: [
         ...(complaint.internalNotes || []),
         { 
@@ -155,7 +154,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     await onUpdateComplaint(escalatedComplaintData); 
     setSelectedPriority(ComplaintPriority.Escalated); 
     toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${newStatus} and priority set to ${ComplaintPriority.Escalated}.` });
-    // Modal might close or stay open depending on onUpdateComplaint behavior
   };
 
 
@@ -165,7 +163,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         <DialogHeader>
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
           <DialogDescription>
-            Manage complaint priority, assignment, and add internal notes. Current status: <Badge variant="outline">{complaint.status}</Badge>
+            Manage complaint priority, assignment, and add internal notes. Current status: <Badge variant="outline" className="align-middle">{complaint.status}</Badge>
             {complaint.assignedToName && complaint.currentHandlerLevel && (
               <span className="text-xs"> (Handler: {complaint.assignedToName} - {complaint.currentHandlerLevel})</span>
             )}
@@ -215,7 +213,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                 <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="priority">Set Priority</Label>
-                    <Select value={selectedPriority || ""} onValueChange={(value) => setSelectedPriority(value as ComplaintPriority)}>
+                    <Select value={selectedPriority || ComplaintPriority.Medium} onValueChange={(value) => setSelectedPriority(value as ComplaintPriority)}>
                       <SelectTrigger id="priority">
                         <SelectValue placeholder="Select priority" />
                       </SelectTrigger>
