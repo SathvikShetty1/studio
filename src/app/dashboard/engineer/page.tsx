@@ -6,20 +6,22 @@ import { useAuth } from '@/hooks/use-auth';
 import { ComplaintTableEngineer } from '@/components/engineer/complaint-table-engineer';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, ListChecks } from 'lucide-react';
-import { ComplaintStatus } from '@/types';
+import { AlertTriangle, CheckCircle, ListChecks, RefreshCw } from 'lucide-react';
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from '@/types';
 import { getEngineerComplaints, updateComplaint as updateComplaintService } from '@/services/complaintService';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 export default function EngineerDashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [assignedComplaints, setAssignedComplaints] = useState<Complaint[]>([]);
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchAssignedComplaints = async () => {
-    if (user && user.id) { // Ensure user and user.id are available
-      setIsLoadingComplaints(true);
+    if (user && user.id) { 
+      if(!isRefreshing) setIsLoadingComplaints(true); else setIsRefreshing(true);
       console.log(`[EngineerDashboardPage][fetchAssignedComplaints] Attempting to fetch complaints for engineer ID (user.id): ${user.id}`);
       try {
         const engineerComplaints = await getEngineerComplaints(user.id);
@@ -31,6 +33,7 @@ export default function EngineerDashboardPage() {
               console.warn("[EngineerDashboardPage][fetchAssignedComplaints] Some complaints were filtered out due to missing ID or being null. Original count:", engineerComplaints.length, "Valid count:", validComplaints.length);
           }
           setAssignedComplaints(validComplaints);
+          console.log("[EngineerDashboardPage][fetchAssignedComplaints] Final assignedComplaints state:", JSON.stringify(validComplaints, null, 2));
         } else {
           console.error("[EngineerDashboardPage][fetchAssignedComplaints] getEngineerComplaints did not return an array. Received:", engineerComplaints);
           setAssignedComplaints([]);
@@ -46,11 +49,13 @@ export default function EngineerDashboardPage() {
         setAssignedComplaints([]); 
       } finally {
         setIsLoadingComplaints(false);
-        console.log("[EngineerDashboardPage][fetchAssignedComplaints] Finished fetching. isLoadingComplaints set to false.");
+        setIsRefreshing(false);
+        console.log("[EngineerDashboardPage][fetchAssignedComplaints] Finished fetching. isLoadingComplaints/isRefreshing set to false.");
       }
     } else {
       console.warn("[EngineerDashboardPage][fetchAssignedComplaints] User or user.id not available. Skipping fetch.");
       setIsLoadingComplaints(false); 
+      setIsRefreshing(false);
       setAssignedComplaints([]); 
     }
   };
@@ -70,7 +75,7 @@ export default function EngineerDashboardPage() {
       setIsLoadingComplaints(false);
       setAssignedComplaints([]);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading]); // Removed toast from dependencies as it's stable
 
   const handleUpdateComplaint = async (updatedComplaint: Complaint) => {
     const originalComplaints = [...assignedComplaints];
@@ -101,7 +106,7 @@ export default function EngineerDashboardPage() {
       ).length,
   };
 
-  if (authLoading || (isLoadingComplaints && user) ) {
+  if (authLoading || (isLoadingComplaints && user && !isRefreshing) ) {
     return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
   }
   if (!user || user.role !== 'engineer') {
@@ -110,9 +115,15 @@ export default function EngineerDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">My Assigned Complaints</h1>
-        <p className="text-muted-foreground">Update status and manage resolutions for your assigned customer complaints.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">My Assigned Complaints</h1>
+          <p className="text-muted-foreground">Update status and manage resolutions for your assigned customer complaints.</p>
+        </div>
+        <Button onClick={fetchAssignedComplaints} disabled={isRefreshing}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh Complaints'}
+        </Button>
       </div>
          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
@@ -145,7 +156,7 @@ export default function EngineerDashboardPage() {
       </div>
 
       <Separator />
-      {isLoadingComplaints && !authLoading ? (
+      {(isLoadingComplaints && !isRefreshing) ? (
         <p>Loading assigned complaints...</p>
       ) : (
         <ComplaintTableEngineer 

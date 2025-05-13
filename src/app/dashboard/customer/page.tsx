@@ -30,16 +30,10 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     async function fetchComplaints() {
-      console.log("[CustomerDashboardPage][useEffect] Initiating fetchComplaints. FirebaseUser:", JSON.stringify(firebaseUser, null, 2));
+      console.log("[CustomerDashboardPage][useEffect] Initiating fetchComplaints. FirebaseUser UID:", firebaseUser?.uid);
 
-      if (!firebaseUser) {
-        console.warn("[CustomerDashboardPage][useEffect] firebaseUser is null or undefined. Skipping fetch.");
-        setMyComplaints([]);
-        setIsLoadingComplaints(false);
-        return;
-      }
-      if (!firebaseUser.uid) {
-        console.warn("[CustomerDashboardPage][useEffect] firebaseUser.uid is missing or empty. Skipping fetch.");
+      if (!firebaseUser || !firebaseUser.uid) {
+        console.warn("[CustomerDashboardPage][useEffect] firebaseUser or firebaseUser.uid is missing. Skipping fetch. UID:", firebaseUser?.uid);
         setMyComplaints([]);
         setIsLoadingComplaints(false);
         return;
@@ -50,7 +44,7 @@ export default function CustomerDashboardPage() {
       let userComplaintsFromService: Complaint[] = [];
       try {
         userComplaintsFromService = await getUserComplaints(firebaseUser.uid);
-        console.log("[CustomerDashboardPage][useEffect] getUserComplaints returned (raw):", JSON.stringify(userComplaintsFromService, null, 2), "Count:", userComplaintsFromService.length);
+        console.log("[CustomerDashboardPage][useEffect] getUserComplaints returned (raw):", JSON.stringify(userComplaintsFromService, null, 2), "Count:", userComplaintsFromService?.length);
         
         if (Array.isArray(userComplaintsFromService)) {
           const validComplaints = userComplaintsFromService.filter(c => c && typeof c.id === 'string');
@@ -58,6 +52,7 @@ export default function CustomerDashboardPage() {
               console.warn("[CustomerDashboardPage][useEffect] Some complaints were filtered out due to missing ID or being null. Original count:", userComplaintsFromService.length, "Valid count:", validComplaints.length);
           }
           console.log("[CustomerDashboardPage][useEffect] Valid complaints after filtering on page:", JSON.stringify(validComplaints, null, 2));
+          console.log("[CustomerDashboardPage][useEffect] About to setMyComplaints with:", JSON.stringify(validComplaints, null, 2), "Count:", validComplaints.length);
           setMyComplaints(validComplaints);
         } else {
           console.error("[CustomerDashboardPage][useEffect] getUserComplaints did not return an array. Received:", userComplaintsFromService);
@@ -85,11 +80,11 @@ export default function CustomerDashboardPage() {
 
     if (!authLoading) {
       console.log("[CustomerDashboardPage][useEffect] Auth loading finished. Current Firebase User UID:", firebaseUser ? firebaseUser.uid : 'No firebaseUser', "App User Role:", user?.role, "IsLoadingComplaints initially:", isLoadingComplaints);
-      fetchComplaints(); // Call fetchComplaints which now includes the checks for firebaseUser and uid
+      fetchComplaints(); 
     } else {
       console.log("[CustomerDashboardPage][useEffect] Auth still loading...");
     }
-  }, [firebaseUser, authLoading, toast, user?.role]);
+  }, [firebaseUser?.uid, authLoading, user?.role]); // Dependency on firebaseUser.uid
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     console.log("[CustomerDashboardPage][handleComplaintSubmitted] Submitting data:", JSON.stringify(newComplaintData));
@@ -100,13 +95,12 @@ export default function CustomerDashboardPage() {
     const completeComplaintData = {
         ...newComplaintData,
         customerId: firebaseUser.uid, 
-        // customerName is already part of newComplaintData if passed from form
     };
 
     const addedComplaint = await addComplaint(completeComplaintData);
     if (addedComplaint) {
       console.log("[CustomerDashboardPage][handleComplaintSubmitted] Complaint added:", JSON.stringify(addedComplaint));
-      setMyComplaints(prev => [addedComplaint, ...prev].filter(c => c && c.id)); // Ensure filtering here too
+      setMyComplaints(prev => [addedComplaint, ...prev].filter(c => c && c.id)); 
       setShowSubmitForm(false);
       toast({
           title: "Complaint Submitted!",
@@ -224,8 +218,7 @@ export default function CustomerDashboardPage() {
               Ready to submit your first complaint? Click the button above.
             </p>
           )}
-           {/* Debugging output for empty state */}
-          {console.log("[CustomerDashboardPage][Render] Displaying empty state. myComplaints length:", myComplaints.length, "isLoadingComplaints:", isLoadingComplaints, "authLoading:", authLoading)}
+          {console.log("[CustomerDashboardPage][Render] Displaying empty state. myComplaints length:", myComplaints.length, "filteredComplaints length:", filteredComplaints.length, "isLoadingComplaints:", isLoadingComplaints, "authLoading:", authLoading)}
         </div>
       )}
     </div>
