@@ -80,11 +80,12 @@ export default function CustomerDashboardPage() {
 
     if (!authLoading) {
       console.log("[CustomerDashboardPage][useEffect] Auth loading finished. Current Firebase User UID:", firebaseUser ? firebaseUser.uid : 'No firebaseUser', "App User Role:", user?.role, "IsLoadingComplaints initially:", isLoadingComplaints);
+      console.log("Calling getUserComplaints with userId:", firebaseUser?.uid); 
       fetchComplaints(); 
     } else {
       console.log("[CustomerDashboardPage][useEffect] Auth still loading...");
     }
-  }, [firebaseUser?.uid, authLoading, user?.role]); // Dependency on firebaseUser.uid
+  }, [firebaseUser?.uid, authLoading, user?.role, toast]); // Added toast to dependencies
 
   const handleComplaintSubmitted = async (newComplaintData: Omit<Complaint, 'id' | 'submittedAt' | 'updatedAt'>) => {
     console.log("[CustomerDashboardPage][handleComplaintSubmitted] Submitting data:", JSON.stringify(newComplaintData));
