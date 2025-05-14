@@ -62,8 +62,9 @@ export default function EngineerDashboardPage() {
   };
 
   useEffect(() => {
+    console.log(`[EngineerDashboardPage][useEffect] Triggered. AuthLoading: ${authLoading}, User available: ${!!user}, Engineer ID (user.id if available): ${user?.id || 'N/A'}`);
     if (!authLoading && user && user.role === 'engineer') {
-      console.log("[EngineerDashboardPage][useEffect] Auth loaded. Engineer user identified:", JSON.stringify(user, null, 2));
+      console.log("[EngineerDashboardPage][useEffect] Auth loaded. Engineer user identified. User object:", JSON.stringify(user, null, 2));
       fetchAssignedComplaints();
     } else if (!authLoading && user && user.role !== 'engineer') {
       console.warn("[EngineerDashboardPage][useEffect] Auth loaded, but user is not an engineer. Role:", user.role);

@@ -140,6 +140,7 @@ export async function getAllComplaints(): Promise<Complaint[]> {
 
 export async function getEngineerComplaints(engineerId: string): Promise<Complaint[]> {
   try {
+    console.log(`[complaintService][getEngineerComplaints] Received engineerId parameter: "${engineerId}"`); // ADDED LOG
     if (typeof engineerId !== 'string' || engineerId.trim() === '') {
       console.error("[complaintService][getEngineerComplaints] Invalid or empty engineerId provided:", engineerId);
       return [];
@@ -147,7 +148,7 @@ export async function getEngineerComplaints(engineerId: string): Promise<Complai
     const complaintsCol = collection(db, 'complaints');
     // Ensure the query uses 'assignedTo' which is the field for engineer ID
     const q = query(complaintsCol, where('assignedTo', '==', engineerId), orderBy('updatedAt', 'desc'));
-    console.log(`[complaintService][getEngineerComplaints] Executing query for engineerId (assignedTo field): "${engineerId}"`);
+    console.log(`[complaintService][getEngineerComplaints] Executing Firestore query for engineerId (assignedTo field): "${engineerId}"`);
     const complaintSnapshot = await getDocs(q);
     console.log(`[complaintService][getEngineerComplaints] Firestore query for engineer "${engineerId}" returned ${complaintSnapshot.size} documents. Is empty: ${complaintSnapshot.empty}`);
     
