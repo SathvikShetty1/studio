@@ -1,64 +1,78 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { mockComplaints as initialMockComplaints } from '@/lib/mock-data';
+import { getAllMockComplaints, updateMockComplaint } from '@/lib/mock-data';
 import { ComplaintTableEngineer } from '@/components/engineer/complaint-table-engineer';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle, ListChecks } from 'lucide-react';
 import { ComplaintStatus } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function EngineerDashboardPage() {
-  const { user } = useAuth();
-  // Initialize state by filtering from the global mock data
-  const [assignedComplaints, setAssignedComplaints] = useState<Complaint[]>(() => {
-    if (user) {
-      return initialMockComplaints.filter(c => c.assignedTo === user.id);
-    }
-    return [];
-  });
+  const { user, isLoading: authLoading } = useAuth();
+  const [assignedComplaints, setAssignedComplaints] = useState<Complaint[]>([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
+  const { toast } = useToast();
 
-  // Effect to re-filter and update `assignedComplaints` if the source array's length changes
-  // or if the user changes.
-  useEffect(() => {
-    if (user) {
-      const engineerComplaints = initialMockComplaints.filter(c => c.assignedTo === user.id);
+  const fetchComplaintsForEngineer = () => {
+    if (user && user.id) {
+      console.log(`[EngineerDashboardPage] Fetching complaints for engineer: ${user.id}`);
+      setIsLoadingComplaints(true);
+      const allComplaints = getAllMockComplaints();
+      const engineerComplaints = allComplaints.filter(c => c.assignedTo === user.id);
+      console.log(`[EngineerDashboardPage] Found ${engineerComplaints.length} complaints for engineer ${user.id}`);
       setAssignedComplaints(engineerComplaints);
+      setIsLoadingComplaints(false);
     } else {
-      setAssignedComplaints([]); // Clear if no user
+      console.log("[EngineerDashboardPage] No user or user.id, clearing complaints.");
+      setAssignedComplaints([]);
+      setIsLoadingComplaints(false);
     }
-  }, [initialMockComplaints.length, user]); // React to source data changes and user changes
+  };
+
+  useEffect(() => {
+    if (!authLoading && user && user.role === 'engineer') {
+      fetchComplaintsForEngineer();
+    } else if (!authLoading) {
+      // If auth is done loading but no engineer user, clear complaints and stop loading.
+      setAssignedComplaints([]);
+      setIsLoadingComplaints(false);
+    }
+  }, [user, authLoading]);
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
-    // Update local state first for immediate UI feedback
-    setAssignedComplaints(prevComplaints =>
-      prevComplaints.map(c => (c.id === updatedComplaint.id ? updatedComplaint : c))
-    );
-    
-    // Also update the global mock data (in a real app, this would be an API call)
-    const index = initialMockComplaints.findIndex(c => c.id === updatedComplaint.id);
-    if (index !== -1) {
-      initialMockComplaints[index] = updatedComplaint;
-    }
-    // If status changes, it might affect assignedComplaints list, re-filter from source.
-    // This also ensures that if an engineer resolves a complaint, and it's filtered out by status,
-    // the assignedComplaints list is updated.
-    if (user) {
-        const currentEngineerComplaints = initialMockComplaints.filter(c => c.assignedTo === user.id);
-        setAssignedComplaints(currentEngineerComplaints);
+    const success = updateMockComplaint(updatedComplaint.id, updatedComplaint);
+    if (success) {
+      toast({
+        title: "Complaint Updated",
+        description: `Complaint #${updatedComplaint.id.slice(-6)} status changed to ${updatedComplaint.status}.`,
+      });
+      // Re-fetch to update the list from the source of truth
+      fetchComplaintsForEngineer();
+    } else {
+       toast({
+        title: "Update Failed",
+        description: `Could not update complaint #${updatedComplaint.id.slice(-6)}.`,
+        variant: "destructive",
+      });
     }
   };
     
   const stats = {
       total: assignedComplaints.length,
-      pending: assignedComplaints.filter(c => c.status === ComplaintStatus.Assigned || c.status === ComplaintStatus.InProgress).length,
+      pending: assignedComplaints.filter(c => c.status === ComplaintStatus.Assigned || c.status === ComplaintStatus.InProgress || c.status === ComplaintStatus.Unresolved).length,
       resolved: assignedComplaints.filter(c => c.status === ComplaintStatus.Resolved || c.status === ComplaintStatus.Closed).length,
   };
 
+  if (authLoading || (isLoadingComplaints && user?.role === 'engineer')) {
+    return <div className="flex items-center justify-center h-screen"><p>Loading dashboard...</p></div>;
+  }
+  
   if (!user || user.role !== 'engineer') {
-    // Should be handled by AuthProvider & layout, but as a safeguard:
     return <p className="p-4">Access Denied. You must be an engineer to view this page.</p>;
   }
 
@@ -99,11 +113,14 @@ export default function EngineerDashboardPage() {
       </div>
 
       <Separator />
-
-      <ComplaintTableEngineer 
-        complaints={assignedComplaints} 
-        onUpdateComplaint={handleUpdateComplaint}
-      />
+      {isLoadingComplaints && !authLoading ? (
+         <p>Loading assigned complaints...</p>
+      ) : (
+        <ComplaintTableEngineer 
+          complaints={assignedComplaints} 
+          onUpdateComplaint={handleUpdateComplaint}
+        />
+      )}
     </div>
   );
 }
