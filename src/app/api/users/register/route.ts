@@ -4,17 +4,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import UserModel from '@/models/User';
 import bcrypt from 'bcryptjs';
-import type { User, UserRole, EngineerLevel } from '@/types';
+import { UserRole, EngineerLevel, type User } from '@/types'; // Changed import
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("[Register API] Attempting to connect to DB...");
     await dbConnect();
     console.log("[Register API] DB Connected.");
 
     const body = await req.json() as {
         name: string;
         email: string;
-        password?: string; // Made password optional here if it's always expected
+        password?: string; 
         role: UserRole;
         engineerLevel?: EngineerLevel;
         avatar?: string;
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest) {
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
+    }
+     if (role === UserRole.Engineer && !engineerLevel) {
+      return NextResponse.json({ message: 'Engineer level is required for engineer role' }, { status: 400 });
     }
 
     const existingUser = await UserModel.findOne({ email: email.toLowerCase() });
@@ -59,6 +63,7 @@ export async function POST(req: NextRequest) {
     };
 
     return NextResponse.json({ message: 'User registered successfully', user: userResponse }, { status: 201 });
+
   } catch (error: any) {
     console.error('Registration API Error:', error); 
     let detail = 'An unexpected error occurred during registration.';
@@ -72,12 +77,14 @@ export async function POST(req: NextRequest) {
     } else if (error && typeof error === 'object' && 'toString' in error) {
         detail = (error as { toString: () => string }).toString();
     }
+     // More specific error logging
+    console.error(`Error details: Name - ${error.name}, Message - ${error.message}, Code - ${error.code}, Stack - ${error.stack}`);
 
     const errorResponsePayload = {
         message: 'Server error during registration.',
         errorDetail: detail,
-        errorCode: error.code, // Include error code if available (e.g., from Mongoose)
-        errorName: error.name, // Include error name if available
+        errorCode: error.code, 
+        errorName: error.name, 
     };
     console.error('Sending error response payload:', errorResponsePayload);
     return NextResponse.json(errorResponsePayload, { status: 500 });
