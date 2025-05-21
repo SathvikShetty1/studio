@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Complaint, User, ComplaintCategory } from '@/types';
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
-import { mockUsers } from '@/lib/mock-data';
+import { getAllMockUsers } from '@/lib/mock-data'; // Changed import
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +17,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -40,9 +41,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   const [selectedPriority, setSelectedPriority] = useState<ComplaintPriorityEnum | undefined>(complaint?.priority);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo || UNASSIGNED_VALUE);
   const [internalNote, setInternalNote] = useState('');
+  const [resolutionTimeline, setResolutionTimeline] = useState<string>('');
+
   const { toast } = useToast();
 
-  const allEngineers = useMemo(() => mockUsers.filter(u => u.role === UserRole.Engineer), []);
+  const allUsers = useMemo(() => getAllMockUsers(), []); // Use function to get all users
+  const allEngineers = useMemo(() => allUsers.filter(u => u.role === UserRole.Engineer), [allUsers]);
 
   const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>(allEngineers);
 
@@ -50,14 +54,15 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     if (complaint) {
       setSelectedPriority(complaint.priority);
       setSelectedEngineerId(complaint.assignedTo || UNASSIGNED_VALUE);
+      setResolutionTimeline(complaint.resolutionTimeline ? format(new Date(complaint.resolutionTimeline), "yyyy-MM-dd") : '');
       setInternalNote('');
 
       let displayEngineers = [...allEngineers];
       if ((complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo) {
-        const currentAssignee = mockUsers.find(u => u.id === complaint.assignedTo);
+        const currentAssignee = allUsers.find(u => u.id === complaint.assignedTo); // Use allUsers here
         if (currentAssignee && currentAssignee.role === UserRole.Engineer && currentAssignee.engineerLevel) {
           const currentLevelIndex = engineerLevelOrder.indexOf(currentAssignee.engineerLevel);
-          if (currentLevelIndex < engineerLevelOrder.length - 1) { // Not already at highest level
+          if (currentLevelIndex < engineerLevelOrder.length - 1) { 
             displayEngineers = allEngineers.filter(eng => 
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
@@ -78,7 +83,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     } else {
       setEngineersForAssignment(allEngineers);
     }
-  }, [complaint, allEngineers]);
+  }, [complaint, allEngineers, allUsers]);
 
 
   if (!complaint) return null;
@@ -86,7 +91,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   const handleSave = () => {
     let updatedStatus = complaint.status;
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
-    const assignedEngineer = finalSelectedEngineerId ? mockUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
+    const assignedEngineer = finalSelectedEngineerId ? allUsers.find(e => e.id === finalSelectedEngineerId) : undefined; // Use allUsers
 
     if (finalSelectedEngineerId && (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Submitted || complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated)) {
       updatedStatus = ComplaintStatus.Assigned;
@@ -100,6 +105,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       assignedToName: assignedEngineer?.name,
       currentHandlerLevel: assignedEngineer?.engineerLevel,
       status: updatedStatus,
+      resolutionTimeline: resolutionTimeline ? new Date(resolutionTimeline) : undefined,
       updatedAt: new Date(),
       internalNotes: internalNote ? [
         ...(complaint.internalNotes || []),
@@ -126,7 +132,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         newStatus = ComplaintStatus.Escalated; 
     }
 
-
     const escalatedComplaint: Complaint = {
       ...complaint,
       status: newStatus, 
@@ -152,19 +157,20 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
-          <DialogDescription>
-            Manage complaint priority, assignment, and add internal notes. Current status: <Badge variant="outline">{complaint.status}</Badge>
+           <DialogDescription className="flex items-center gap-2">
+            <span>Manage complaint status, priority, assignment, and add internal notes.</span>
+            <Badge variant="outline">{complaint.status}</Badge>
             {complaint.assignedToName && complaint.currentHandlerLevel && (
-              <span className="text-xs"> (Handler: {complaint.assignedToName} - {complaint.currentHandlerLevel})</span>
+              <span className="text-xs">(Handler: {complaint.assignedToName} - {complaint.currentHandlerLevel})</span>
             )}
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow pr-6 -mr-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+        <ScrollArea className="flex-1 min-h-0 bg-red-100"> {/* Temporary bg-red-100 */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 bg-blue-100"> {/* Temporary bg-blue-100 */}
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -200,19 +206,18 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                 <CardHeader><CardTitle className="text-lg">Admin Actions</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="priority">Set Priority</Label>
-                    <Select value={selectedPriority} onValueChange={(value) => setSelectedPriority(value as ComplaintPriorityEnum)}>
-                      <SelectTrigger id="priority">
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(ComplaintPriorityEnum).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
+                    <Label htmlFor="status">Set Status</Label>
+                     <Select value={complaint.status} disabled> {/* Status is informational for now, assignment logic determines if it becomes 'Assigned' */}
+                        <SelectTrigger id="status">
+                            <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Object.values(ComplaintStatus).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
                     </Select>
                   </div>
-
                   <div>
-                    <Label htmlFor="assignee">Assign to Engineer</Label>
+                    <Label htmlFor="assignee">Assign Engineer</Label>
                     <Select value={selectedEngineerId || UNASSIGNED_VALUE} onValueChange={setSelectedEngineerId}>
                       <SelectTrigger id="assignee">
                         <SelectValue placeholder="Select engineer" />
@@ -229,6 +234,29 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                     {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && engineersForAssignment.length === 0 && (
                         <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for escalation based on current assignment.</p>
                     )}
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="priority">Set Priority</Label>
+                    <Select value={selectedPriority} onValueChange={(value) => setSelectedPriority(value as ComplaintPriorityEnum)}>
+                      <SelectTrigger id="priority">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(ComplaintPriorityEnum).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="resolution-timeline">Resolution Timeline (Optional)</Label>
+                    <Input 
+                        id="resolution-timeline" 
+                        type="date" 
+                        value={resolutionTimeline}
+                        onChange={(e) => setResolutionTimeline(e.target.value)}
+                        className="block w-full"
+                    />
                   </div>
                   
                   <div>
@@ -275,3 +303,5 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
+
+    
