@@ -72,14 +72,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             );
           } else {
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-            if (displayEngineers.length === 0) {
+             if (displayEngineers.length === 0) { 
                  displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
             }
           }
         }
       }
       setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers);
-
+      
       let statuses: ComplaintStatus[] = Object.values(ComplaintStatus);
       if (complaint.status === ComplaintStatus.Resolved) {
         statuses = [ComplaintStatus.Resolved, ComplaintStatus.Closed, ComplaintStatus.Reopened];
@@ -119,7 +119,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         (newStatus === ComplaintStatus.PendingAssignment || 
          newStatus === ComplaintStatus.Submitted || 
          newStatus === ComplaintStatus.Unresolved ||
-         newStatus === ComplaintStatus.Reopened ||
+         newStatus === ComplaintStatus.Reopened || 
          newStatus === ComplaintStatus.Escalated)) {
       newStatus = ComplaintStatus.Assigned;
     } else if (!finalSelectedEngineerId && newStatus === ComplaintStatus.Assigned) {
@@ -127,18 +127,18 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     }
 
     if (currentStatus === ComplaintStatus.Reopened && complaint.status !== ComplaintStatus.Reopened) {
-      newPriority = ComplaintPriorityEnum.High;
+      newPriority = ComplaintPriorityEnum.High; 
       newResolutionDetails = undefined; 
-      newResolvedAt = undefined;
+      newResolvedAt = undefined; 
       newNotes.push({
         id: `note-adminreopen-${Date.now()}`,
         userId: adminUser?.id || 'unknown-admin',
         userName: adminUser?.name || 'Admin',
         text: `Complaint reopened by admin. Original status: ${complaint.status}.`,
         timestamp: new Date(),
-        isInternal: true
+        isInternal: true 
       });
-      if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment;
+      if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment; 
     }
 
     if (currentStatus === ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Closed) {
@@ -191,7 +191,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     const escalatedComplaint: Complaint = {
       ...complaint,
       status: ComplaintStatus.Escalated,
-      priority: ComplaintPriorityEnum.Escalated,
+      priority: ComplaintPriorityEnum.Escalated, 
       updatedAt: new Date(),
       internalNotes: [
         ...(complaint.internalNotes || []),
@@ -219,7 +219,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="flex-shrink-0"> {/* Ensure header does not shrink */}
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2">
             <span>Manage complaint status, priority, assignment, and add internal notes.</span>
@@ -231,7 +231,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0"> 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4"> 
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -352,7 +352,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
-                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs">
+                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs"> 
                     {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
                       <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
                         <p className="font-semibold">
@@ -370,7 +370,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </div>
         </ScrollArea>
 
-        <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0">
+        <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0"> {/* Ensure footer does not shrink */}
           {(complaint.status !== ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Resolved) && (
             <Button variant="destructive" onClick={handleEscalateAction} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
               <AlertTriangle className="mr-2 h-4 w-4" />
@@ -384,6 +384,4 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
-    
-
     
