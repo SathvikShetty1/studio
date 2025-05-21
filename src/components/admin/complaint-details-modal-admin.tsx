@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Complaint, User, ComplaintCategory } from '@/types';
+import type { Complaint, User, ComplaintCategory, ComplaintNote } from '@/types';
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
 import { getAllMockUsers } from '@/lib/mock-data';
 import { Button } from "@/components/ui/button";
@@ -71,15 +71,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else {
+            // If current assignee is already highest level, show only other executives or themselves if no others
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-             if (displayEngineers.length === 0) {
-                const otherExecutives = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-                if (otherExecutives.length > 0) {
-                    displayEngineers = otherExecutives;
-                } else {
-                    // If no other execs, show current exec (if applicable) or all execs if no current one
-                    displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
-                }
+            if (displayEngineers.length === 0) {
+                 displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
             }
           }
         }
@@ -87,29 +82,19 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers);
 
       // Dynamically set available statuses
-      let statuses: ComplaintStatus[] = [
-        ComplaintStatus.Submitted,
-        ComplaintStatus.PendingAssignment,
-        ComplaintStatus.Assigned,
-        ComplaintStatus.InProgress,
-        ComplaintStatus.Escalated,
-        ComplaintStatus.Unresolved,
-        ComplaintStatus.Resolved,
-        ComplaintStatus.Closed,
-        ComplaintStatus.Reopened,
-      ];
+      let statuses: ComplaintStatus[] = Object.values(ComplaintStatus);
 
       if (complaint.status === ComplaintStatus.Resolved) {
-        statuses = [ComplaintStatus.Resolved, ComplaintStatus.Closed, ComplaintStatus.Reopened]; // Can close or reopen a resolved case
+        statuses = [ComplaintStatus.Resolved, ComplaintStatus.Closed, ComplaintStatus.Reopened];
       } else if (complaint.status === ComplaintStatus.Closed) {
-        statuses = [ComplaintStatus.Closed, ComplaintStatus.Reopened]; // Can reopen a closed case
+        statuses = [ComplaintStatus.Closed, ComplaintStatus.Reopened];
+      } else if (complaint.status === ComplaintStatus.Reopened) {
+         statuses = [ComplaintStatus.Reopened, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned, ComplaintStatus.InProgress];
       } else if (complaint.status === ComplaintStatus.Escalated) {
-        // Allow assignment or further escalation for an escalated case.
-        statuses = [ComplaintStatus.Escalated, ComplaintStatus.Assigned, ComplaintStatus.PendingAssignment];
+        statuses = [ComplaintStatus.Escalated, ComplaintStatus.Assigned, ComplaintStatus.InProgress, ComplaintStatus.Resolved, ComplaintStatus.Unresolved];
       } else if (complaint.status === ComplaintStatus.Unresolved) {
         statuses = [ComplaintStatus.Unresolved, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned];
       }
-      // Other statuses might have their own specific flows too.
       setAvailableStatuses(statuses);
 
     } else {
@@ -122,53 +107,63 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   if (!complaint) return null;
 
   const handleSave = () => {
-    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", selectedEngineerId, "Current Status:", currentStatus);
+    console.log("[AdminModal][handleSave] Attempting to save. CurrentStatus:", currentStatus, "Selected Engineer ID:", selectedEngineerId);
+    
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
     const assignedEngineer = finalSelectedEngineerId ? allUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
-    console.log("[AdminModal][handleSave] Assigned Engineer found:", assignedEngineer?.name);
 
-    let newStatus = currentStatus || complaint.status; // Use selected status from dropdown
+    let newStatus = currentStatus || complaint.status;
     let newPriority = selectedPriority || complaint.priority;
     let newResolutionDetails = complaint.resolutionDetails;
     let newResolvedAt = complaint.resolvedAt;
     let newNotes = complaint.internalNotes || [];
 
-    if (finalSelectedEngineerId && !complaint.assignedTo && (newStatus === ComplaintStatus.PendingAssignment || newStatus === ComplaintStatus.Submitted || newStatus === ComplaintStatus.Unresolved || newStatus === ComplaintStatus.Escalated || newStatus === ComplaintStatus.Reopened)) {
+    // If an engineer is selected AND the status implies it needs assignment, set to 'Assigned'.
+    if (finalSelectedEngineerId && 
+        (newStatus === ComplaintStatus.PendingAssignment || 
+         newStatus === ComplaintStatus.Submitted || 
+         newStatus === ComplaintStatus.Unresolved ||
+         newStatus === ComplaintStatus.Reopened || // If reopened and assigning, it becomes Assigned
+         newStatus === ComplaintStatus.Escalated)) { // If escalated and assigning, it becomes Assigned
       newStatus = ComplaintStatus.Assigned;
-    } else if (finalSelectedEngineerId && complaint.assignedTo !== finalSelectedEngineerId) {
-      // If engineer changed, set to assigned if it was in a state that implies no assignment
-      if ([ComplaintStatus.PendingAssignment, ComplaintStatus.Submitted, ComplaintStatus.Unresolved, ComplaintStatus.Reopened].includes(newStatus)){
-         newStatus = ComplaintStatus.Assigned;
-      }
+    } else if (!finalSelectedEngineerId && newStatus === ComplaintStatus.Assigned) {
+      // If engineer is unassigned, but status is 'Assigned', move to 'PendingAssignment'
+      newStatus = ComplaintStatus.PendingAssignment;
     }
 
 
     if (currentStatus === ComplaintStatus.Reopened && complaint.status !== ComplaintStatus.Reopened) {
-      newPriority = ComplaintPriorityEnum.High;
+      newPriority = ComplaintPriorityEnum.High; // Default reopened to High priority
       newResolutionDetails = undefined; // Clear previous resolution
       newResolvedAt = undefined;
       newNotes.push({
-        id: `note-reopen-${Date.now()}`,
+        id: `note-adminreopen-${Date.now()}`,
         userId: adminUser?.id || 'unknown-admin',
         userName: adminUser?.name || 'Admin',
-        text: `Complaint reopened by admin.`,
+        text: `Complaint reopened by admin. Original status: ${complaint.status}.`,
         timestamp: new Date(),
         isInternal: true
-      });
-      // If reopening and assigning an engineer, set to Assigned
-      if (finalSelectedEngineerId) {
-        newStatus = ComplaintStatus.Assigned;
-      } else {
-        newStatus = ComplaintStatus.PendingAssignment; // Or keep Reopened and let them assign
-      }
+      } as ComplaintNote);
+      // If assigning an engineer during reopen, it's already handled above to set to Assigned.
+      // If not assigning, and it's reopened, it can stay Reopened or move to PendingAssignment.
+      if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment;
     }
 
     if (currentStatus === ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Closed) {
       if (!complaint.resolvedAt && complaint.status === ComplaintStatus.Resolved) {
-        newResolvedAt = new Date(); // Set resolvedAt if closing a resolved complaint
+        newResolvedAt = new Date(); 
       }
+      newNotes.push({
+        id: `note-adminclose-${Date.now()}`,
+        userId: adminUser?.id || 'unknown-admin',
+        userName: adminUser?.name || 'Admin',
+        text: `Complaint closed by admin. Previous status: ${complaint.status}.`,
+        timestamp: new Date(),
+        isInternal: true
+      } as ComplaintNote);
     }
-
+    
+    console.log(`[AdminModal][handleSave] Values before update: status=${newStatus}, assignedTo=${finalSelectedEngineerId}, priority=${newPriority}`);
 
     const updatedComplaint: Complaint = {
       ...complaint,
@@ -191,7 +186,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               text: internalNote,
               timestamp: new Date(),
               isInternal: true
-            }
+            } as ComplaintNote,
           ]
         : newNotes,
     };
@@ -206,7 +201,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     const escalatedComplaint: Complaint = {
       ...complaint,
       status: ComplaintStatus.Escalated,
-      priority: ComplaintPriorityEnum.Escalated,
+      priority: ComplaintPriorityEnum.Escalated, // Automatically set priority to Escalated
       updatedAt: new Date(),
       internalNotes: [
         ...(complaint.internalNotes || []),
@@ -214,16 +209,21 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           id: `note-escalate-${Date.now()}`,
           userId: adminUser.id,
           userName: adminUser.name,
-          text: `Complaint escalated by admin. Priority set to ${ComplaintPriorityEnum.Escalated}.`,
+          text: `Complaint escalated by admin. Priority set to ${ComplaintPriorityEnum.Escalated}. Original status: ${complaint.status}.`,
           timestamp: new Date(),
           isInternal: true
-        }
+        } as ComplaintNote,
       ],
+       // When escalated, it usually means it needs reassignment to a higher level or different team.
+      assignedTo: undefined, 
+      assignedToName: undefined,
+      currentHandlerLevel: undefined,
     };
     onUpdateComplaint(escalatedComplaint);
-    setCurrentStatus(ComplaintStatus.Escalated);
+    setCurrentStatus(ComplaintStatus.Escalated); // Update local state for the modal
     setSelectedPriority(ComplaintPriorityEnum.Escalated);
-    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${ComplaintStatus.Escalated} and priority set to ${ComplaintPriorityEnum.Escalated}.` });
+    setSelectedEngineerId(UNASSIGNED_VALUE); // Clear assignment in modal
+    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${ComplaintStatus.Escalated}. Please assign to an appropriate engineer.` });
     // No need to close modal here, admin might want to assign immediately
   };
 
@@ -231,7 +231,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2">
             <span>Manage complaint status, priority, assignment, and add internal notes.</span>
@@ -242,7 +242,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0"> {/* Ensure ScrollArea can flex and has min-height */}
+        <ScrollArea className="flex-1 min-h-0"> 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
               <Card>
@@ -253,7 +253,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
                   <div className="flex items-center">
                     <strong>Current Priority:</strong>&nbsp;
-                    <Badge variant={(complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} className="ml-1">
+                    <Badge 
+                        variant={(complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} 
+                        className="ml-1"
+                    >
                       {complaint.priority || "N/A"}
                     </Badge>
                   </div>
@@ -311,12 +314,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                         {engineersForAssignment.length > 0 ? (
                             engineersForAssignment.map(eng => <SelectItem key={eng.id} value={eng.id}>{eng.name} ({eng.engineerLevel})</SelectItem>)
                         ) : (
+                             complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated ?
                             <SelectItem value="no_eligible_engineers" disabled>No eligible higher-level engineers</SelectItem>
+                            : <SelectItem value="no_engineers" disabled>No engineers available</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                     {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && engineersForAssignment.length === 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for current escalation path.</p>
+                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for current escalation path. Ensure Executive engineers are registered.</p>
                     )}
                   </div>
 
@@ -358,11 +363,15 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-md">Internal Notes History</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
                   <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs">
-                    {complaint.internalNotes.slice().reverse().map(note => (
-                      <div key={note.id} className="p-2 bg-secondary rounded">
-                        <p className="font-semibold">{note.userName} <span className="font-normal text-muted-foreground">({format(new Date(note.timestamp), "PP p")})</span>:</p>
+                    {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
+                      <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
+                        <p className="font-semibold">
+                          {note.userName} 
+                          {note.isInternal && <Badge variant="outline" className="ml-2 text-xs bg-yellow-100 text-yellow-700 border-yellow-300">Internal</Badge>}
+                          <span className="font-normal text-muted-foreground"> ({format(new Date(note.timestamp), "PP p")})</span>:
+                        </p>
                         <p>{note.text}</p>
                       </div>
                     ))}
@@ -373,8 +382,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </div>
         </ScrollArea>
 
-        <DialogFooter className="gap-2 sm:gap-0 pt-4">
-          {complaint.status !== ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Escalated && ( // Avoid re-escalating if already escalated
+        <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0">
+          {(complaint.status !== ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Resolved) && (
             <Button variant="destructive" onClick={handleEscalateAction} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
               <AlertTriangle className="mr-2 h-4 w-4" />
               Escalate Complaint

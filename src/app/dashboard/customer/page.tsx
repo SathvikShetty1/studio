@@ -4,10 +4,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SubmitComplaintForm } from '@/components/complaints/submit-complaint-form';
 import { ComplaintCard } from '@/components/complaints/complaint-card';
-import type { Complaint } from '@/types';
+import type { Complaint, ComplaintNote } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllMockComplaints, addComplaintToMock } from '@/lib/mock-data';
-import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react';
+import { getAllMockComplaints, addComplaintToMock, updateMockComplaint } from '@/lib/mock-data';
+import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -19,10 +19,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ComplaintStatus } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function CustomerDashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus[]>([]);
@@ -53,14 +55,47 @@ export default function CustomerDashboardPage() {
 
   const handleComplaintSubmitted = (newComplaint: Complaint) => {
     console.log("[CustomerDashboardPage] handleComplaintSubmitted triggered by form on this page for complaint:", newComplaint.id);
-    addComplaintToMock(newComplaint); // Save to localStorage
-    fetchMyComplaints(); // Re-fetch to update the list
+    addComplaintToMock(newComplaint); 
+    fetchMyComplaints(); 
     setShowSubmitForm(false);
+    toast({
+      title: "Complaint Submitted!",
+      description: `Your complaint #${newComplaint.id.slice(-6)} has been successfully submitted.`,
+    });
+  };
+
+  const handleRequestReopen = (complaintId: string) => {
+    const complaintToReopen = myComplaints.find(c => c.id === complaintId);
+    if (complaintToReopen && user) {
+      const updatedComplaint: Complaint = {
+        ...complaintToReopen,
+        status: ComplaintStatus.Reopened,
+        updatedAt: new Date(),
+        internalNotes: [
+          ...(complaintToReopen.internalNotes || []),
+          {
+            id: `note-reopenreq-${Date.now()}`,
+            userId: user.id,
+            userName: user.name,
+            text: "Customer requested to reopen the complaint.",
+            timestamp: new Date(),
+            isInternal: false, 
+          } as ComplaintNote,
+        ],
+      };
+      updateMockComplaint(complaintId, updatedComplaint);
+      fetchMyComplaints(); // Refresh the list
+      toast({
+        title: "Reopen Requested",
+        description: `Complaint #${complaintId.slice(-6)} has been flagged for reopening.`,
+      });
+    }
   };
   
   const filteredComplaints = myComplaints.filter(complaint => 
     statusFilter.length === 0 || statusFilter.includes(complaint.status)
-  );
+  ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
 
   if (!user) return <div className="flex items-center justify-center h-screen"><p>Loading user data or please login.</p></div>;
   if (isLoadingComplaints) return <div className="flex items-center justify-center h-screen"><p>Loading complaints...</p></div>;
@@ -116,7 +151,10 @@ export default function CustomerDashboardPage() {
              {statusFilter.length > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem onCheckedChange={() => setStatusFilter([])} className="text-destructive">
+                <DropdownMenuCheckboxItem 
+                  onCheckedChange={() => setStatusFilter([])} 
+                  className="text-sm !text-destructive focus:!text-destructive hover:!bg-destructive/10"
+                >
                   Clear Filters
                 </DropdownMenuCheckboxItem>
               </>
@@ -128,7 +166,12 @@ export default function CustomerDashboardPage() {
       {filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredComplaints.map(complaint => (
-            <ComplaintCard key={complaint.id} complaint={complaint} />
+            <ComplaintCard 
+              key={complaint.id} 
+              complaint={complaint} 
+              onRequestReopen={handleRequestReopen}
+              userRole="customer"
+            />
           ))}
         </div>
       ) : (
