@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -15,7 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// ScrollArea is removed for old-school CSS scroll
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip } from 'lucide-react';
@@ -96,15 +97,15 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
           <DialogDescription>
             Update the status and resolution details for this complaint. Current Engineer Level: {complaint.currentHandlerLevel || "N/A"}
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow pr-6 -mr-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+        <div className="flex-1 overflow-y-auto p-6"> {/* This div will handle scrolling */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -115,16 +116,16 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                   <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
                   <div>
                     <strong>Description:</strong>
-                    <p className="mt-1 p-2 bg-secondary rounded-md">{complaint.description}</p>
+                    <p className="mt-1 p-2 bg-secondary rounded-md whitespace-pre-wrap">{complaint.description}</p>
                   </div>
                   {complaint.attachments && complaint.attachments.length > 0 && (
                     <div>
                       <strong>Attachments:</strong>
-                      <ul className="list-disc list-inside mt-1">
+                      <ul className="list-disc list-inside mt-1 space-y-1">
                         {complaint.attachments.map(att => (
-                          <li key={att.id} className="text-primary hover:underline">
+                          <li key={att.id} className="text-primary hover:underline text-xs">
                             <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                              <Paperclip className="h-4 w-4 mr-1 inline-block" /> {att.fileName}
+                              <Paperclip className="h-3 w-3 mr-1.5 inline-block flex-shrink-0" /> {att.fileName}
                             </a>
                           </li>
                         ))}
@@ -136,11 +137,11 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Internal Notes History</CardTitle></CardHeader>
-                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs">
+                  <CardContent className="space-y-2 text-xs"> {/* Removed max-h and overflow from here */}
                     {complaint.internalNotes.slice().reverse().map(note => (
                       <div key={note.id} className="p-2 bg-secondary rounded">
                         <p className="font-semibold">{note.userName} <span className="font-normal text-muted-foreground">({format(new Date(note.timestamp), "PP p")})</span>:</p>
-                        <p>{note.text}</p>
+                        <p className="whitespace-pre-wrap">{note.text}</p>
                       </div>
                     ))}
                   </CardContent>
@@ -163,11 +164,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Show current status if it's not in allowed list but is the current one and not terminal */}
                         {complaint.status && !engineerAllowedStatuses.includes(complaint.status) && !isTerminalStatusForEngineer && (
                              <SelectItem value={complaint.status} disabled>{complaint.status} (Current)</SelectItem>
                         )}
-                         {/* Always show the current status if it is terminal, but disabled */}
                         {isTerminalStatusForEngineer && complaint.status && (
                             <SelectItem value={complaint.status} disabled>{complaint.status} (Current - Locked)</SelectItem>
                         )}
@@ -207,9 +206,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
               </Card>
             </div>
           </div>
-        </ScrollArea>
+        </div>
         
-        <DialogFooter className="pt-4">
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave} disabled={isTerminalStatusForEngineer}>Save Changes</Button>
         </DialogFooter>
@@ -217,4 +216,3 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     </Dialog>
   );
 }
-
