@@ -1,9 +1,11 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +23,7 @@ import type { User } from "@/types";
 import { UserRole, EngineerLevel } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { mockUsers } from '@/lib/mock-data';
+import { addMockUser, getAllMockUsers } from '@/lib/mock-data';
 
 
 const formSchema = z.object({
@@ -42,6 +44,7 @@ const formSchema = z.object({
 export function RegisterForm() {
   const { toast } = useToast();
   const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -57,13 +60,16 @@ export function RegisterForm() {
   const selectedRole = form.watch("role");
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    const existingUser = mockUsers.find(u => u.email === values.email);
+    setIsSubmitting(true);
+    const existingUsers = getAllMockUsers(); // Fetch current users
+    const existingUser = existingUsers.find(u => u.email === values.email);
     if (existingUser) {
       toast({
         title: "Registration Failed",
         description: "An account with this email already exists.",
         variant: "destructive",
       });
+      setIsSubmitting(false);
       return;
     }
 
@@ -71,19 +77,22 @@ export function RegisterForm() {
       id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: values.name,
       email: values.email,
+      // Note: In a real app, password would be hashed and not stored directly
+      // For this localStorage example, we're omitting storing the password directly for simplicity
+      // but in a real scenario with localStorage, you would NOT store plaintext passwords.
+      // This example focuses on role and other details.
       role: values.role,
       avatar: `https://picsum.photos/seed/${values.email}/40/40`,
       ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
     };
-
-    // Directly mutate the imported mockUsers array
-    const usersStore = require('@/lib/mock-data').mockUsers;
-    usersStore.push(newUser);
+    
+    addMockUser(newUser);
 
     toast({
       title: "Registration Successful!",
       description: `User ${values.name} created as a ${values.role}${values.role === UserRole.Engineer ? ` (${values.engineerLevel})` : ''}. You can now log in.`,
     });
+    setIsSubmitting(false);
     router.push('/login');
   }
 
@@ -162,8 +171,8 @@ export function RegisterForm() {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={UserRole.Customer}>Customer</SelectItem>
-                      <SelectItem value={UserRole.Admin}>Admin (Demo)</SelectItem>
-                      <SelectItem value={UserRole.Engineer}>Engineer (Demo)</SelectItem>
+                      <SelectItem value={UserRole.Admin}>Admin</SelectItem>
+                      <SelectItem value={UserRole.Engineer}>Engineer</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -194,7 +203,9 @@ export function RegisterForm() {
                 )}
               />
             )}
-            <Button type="submit" className="w-full">Register</Button>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Registering..." : "Register"}
+            </Button>
           </form>
         </Form>
       </CardContent>

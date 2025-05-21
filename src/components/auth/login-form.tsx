@@ -1,9 +1,11 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Link from "next/link";
+import { useState } from "react"; // Added import
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,17 +21,18 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { UserRole } from "@/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Added Select
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  role: z.nativeEnum(UserRole).optional(), // Role selection for easy testing
+  role: z.nativeEnum(UserRole).optional(), 
 });
 
 export function LoginForm() {
-  const { login } = useAuth();
+  const { login, isLoading: authIsLoading } = useAuth();
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -39,19 +42,31 @@ export function LoginForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    const success = login(values.email, values.role); // Pass role if selected
-    if (success) {
-      toast({
-        title: "Login Successful",
-        description: `Welcome back! Redirecting to your dashboard...`,
-      });
-    } else {
-      toast({
-        title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
-        variant: "destructive",
-      });
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    try {
+      const success = await login(values.email, values.password, values.role); 
+      if (success) {
+        toast({
+          title: "Login Successful",
+          description: `Welcome back! Redirecting to your dashboard...`,
+        });
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid email, password, or role. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+        console.error("Login error:", error);
+        toast({
+            title: "Login Error",
+            description: (error as Error).message || "An unexpected error occurred during login.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsSubmitting(false);
     }
   }
 
@@ -95,7 +110,7 @@ export function LoginForm() {
               name="role"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Login As (For Demo)</FormLabel>
+                  <FormLabel>Login As</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -112,7 +127,9 @@ export function LoginForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full">Login</Button>
+            <Button type="submit" className="w-full" disabled={isSubmitting || authIsLoading}>
+              {isSubmitting ? "Logging in..." : "Login"}
+            </Button>
           </form>
         </Form>
       </CardContent>

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import type { User } from '@/types';
-import { mockUsers } from '@/lib/mock-data';
+import { getAllMockUsers, addMockUser, updateMockUser, deleteMockUser } from '@/lib/mock-data';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,13 +19,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from '@/hooks/use-auth';
+// TODO: Create a UserFormModal for adding/editing users
 
 export default function ManageUsersPage() {
   const { user: adminUser } = useAuth();
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // In a real app, you'd fetch users and have functions to add/edit/delete them.
-  // For this demo, we're just displaying from mock data.
+  useEffect(() => {
+    const loadUsers = () => {
+      const allUsers = getAllMockUsers();
+      setUsers(allUsers);
+      setIsLoading(false);
+    };
+    loadUsers();
+  }, []);
+
 
   if (!adminUser || adminUser.role !== 'admin') {
     return <p className="p-4">Access Denied. You must be an admin to view this page.</p>;
@@ -38,6 +47,19 @@ export default function ManageUsersPage() {
     return (names[0][0] + (names.length > 1 ? names[names.length - 1][0] : '')).toUpperCase();
   };
 
+  // Placeholder functions for future modal integration
+  const handleAddUser = () => console.log("Add new user clicked");
+  const handleEditUser = (userId: string) => console.log("Edit user:", userId);
+  const handleDeleteUser = (userId: string) => {
+    deleteMockUser(userId);
+    setUsers(getAllMockUsers()); // Refresh list
+    console.log("Delete user:", userId);
+  };
+
+  if (isLoading) {
+    return <p>Loading users...</p>;
+  }
+
 
   return (
     <div className="space-y-6">
@@ -46,7 +68,7 @@ export default function ManageUsersPage() {
           <h1 className="text-2xl font-semibold">Manage Users</h1>
           <p className="text-muted-foreground">View and manage all user accounts in the system.</p>
         </div>
-        <Button>
+        <Button onClick={handleAddUser}>
           <UserPlus className="mr-2 h-4 w-4" /> Add New User
         </Button>
       </div>
@@ -96,10 +118,10 @@ export default function ManageUsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditUser(user.id)}>
                           <Edit className="mr-2 h-4 w-4" /> Edit User
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
+                        <DropdownMenuItem onClick={() => handleDeleteUser(user.id)} className="text-destructive">
                           <Trash2 className="mr-2 h-4 w-4" /> Delete User
                         </DropdownMenuItem>
                       </DropdownMenuContent>
