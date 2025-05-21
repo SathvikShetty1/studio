@@ -36,29 +36,43 @@ export default function EngineerDashboardPage() {
 
   useEffect(() => {
     if (!authLoading && user && user.role === 'engineer') {
+      console.log(`[EngineerDashboardPage][useEffect] Triggered. AuthLoading: false, User available: true, Engineer ID (user.id if available): ${user?.id}`);
       fetchComplaintsForEngineer();
     } else if (!authLoading) {
       // If auth is done loading but no engineer user, clear complaints and stop loading.
+      console.warn(`[EngineerDashboardPage][useEffect] Auth loaded, but user is not an engineer or no user. Role: ${user?.role}, User available: ${!!user}`);
       setAssignedComplaints([]);
       setIsLoadingComplaints(false);
+    } else {
+      console.log("[EngineerDashboardPage][useEffect] Auth still loading or user not yet available...");
     }
   }, [user, authLoading]);
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
+    // Optimistic update: Update UI immediately
+    setAssignedComplaints(prevComplaints =>
+      prevComplaints.map(c =>
+        c.id === updatedComplaint.id ? updatedComplaint : c
+      )
+    );
+
     const success = updateMockComplaint(updatedComplaint.id, updatedComplaint);
     if (success) {
       toast({
         title: "Complaint Updated",
         description: `Complaint #${updatedComplaint.id.slice(-6)} status changed to ${updatedComplaint.status}.`,
       });
-      // Re-fetch to update the list from the source of truth
-      fetchComplaintsForEngineer();
+      // Optionally, if you want to ensure data consistency even after optimistic update,
+      // you can re-fetch, but for localStorage it might be redundant if updateMockComplaint is synchronous and reliable.
+      // fetchComplaintsForEngineer(); 
     } else {
        toast({
         title: "Update Failed",
-        description: `Could not update complaint #${updatedComplaint.id.slice(-6)}.`,
+        description: `Could not update complaint #${updatedComplaint.id.slice(-6)}. Re-fetching data.`,
         variant: "destructive",
       });
+      // Re-fetch if update fails to ensure UI reflects the true state
+      fetchComplaintsForEngineer();
     }
   };
     
