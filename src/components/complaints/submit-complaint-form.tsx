@@ -55,8 +55,14 @@ interface SubmitComplaintFormProps {
 const readFileAsDataURL = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('FileReader did not return a string.'));
+      }
+    };
+    reader.onerror = (error) => reject(error);
     reader.readAsDataURL(file);
   });
 };
@@ -90,10 +96,11 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
     }
 
     const processedAttachments: ComplaintAttachment[] = [];
-    if (values.attachments) {
+    if (values.attachments && values.attachments.length > 0) {
       for (const file of Array.from(values.attachments)) {
         try {
           const dataUrl = await readFileAsDataURL(file);
+          console.log(`[SubmitComplaintForm] Processed file ${file.name}, dataUrl starts with: ${dataUrl.substring(0,30)}`);
           processedAttachments.push({
             id: `attach-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             fileName: file.name,
@@ -118,6 +125,8 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
       status: ComplaintStatus.Submitted,
       attachments: processedAttachments,
     };
+    console.log("[SubmitComplaintForm] New complaint object:", JSON.stringify(newComplaint, (key, value) => key === 'url' && typeof value === 'string' && value.length > 100 ? value.substring(0,100) + '...' : value, 2));
+
 
     onComplaintSubmitted(newComplaint);
     form.reset();

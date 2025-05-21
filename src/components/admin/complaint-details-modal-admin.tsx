@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-// ScrollArea is not used in this "old-school CSS scroll" approach
+// ScrollArea is removed for old-school CSS scroll
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
@@ -117,6 +117,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
     const assignedEngineerDetails = finalSelectedEngineerId ? allUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
+    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", finalSelectedEngineerId, "Engineer found:", assignedEngineerDetails?.name);
+
 
     let newStatus = currentStatus || complaint.status;
     let newPriority = selectedPriority || complaint.priority;
@@ -152,6 +154,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       if (!finalSelectedEngineerId) {
         newStatus = ComplaintStatus.PendingAssignment;
         newCurrentHandlerLevel = undefined;
+      } else {
+        newStatus = ComplaintStatus.Assigned; // Ensure it's assigned if an engineer is selected during reopen
       }
     }
 
@@ -198,7 +202,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     updateMockComplaint(complaint.id, updatedComplaintData); 
     onUpdateComplaint(updatedComplaintData); 
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
-    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", finalSelectedEngineerId, "Engineer found:", assignedEngineerDetails?.name);
     onClose();
   };
 
@@ -219,16 +222,13 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         if (currentLevelIndex < engineerLevelOrder.length - 1) {
             nextLevel = engineerLevelOrder[currentLevelIndex + 1];
         } else {
-            // Already at Executive, but not unresolved. Can still mark as Escalated for visibility / special queue
-            toast({ title: "Max Level", description: "Complaint is already at Executive level. Marking as 'Escalated'.", variant: "default" });
+             toast({ title: "Max Level", description: "Complaint is already at Executive level. Marking as 'Escalated'.", variant: "default" });
             setCurrentStatus(ComplaintStatus.Escalated);
             setSelectedPriority(ComplaintPriorityEnum.Escalated);
-            // Allow assigning to any executive if it's just marked escalated at exec level
             setEngineersForAssignment(allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive));
             return;
         }
     } else {
-      // No current handler, default escalation target to Junior or above
       nextLevel = EngineerLevel.Junior;
     }
 
@@ -251,7 +251,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       ],
       assignedTo: undefined, 
       assignedToName: undefined,
-      currentHandlerLevel: undefined, // Clear current handler as it's being escalated
+      currentHandlerLevel: undefined, 
     };
     updateMockComplaint(complaint.id, escalatedComplaint);
     onUpdateComplaint(escalatedComplaint);
@@ -318,13 +318,16 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                     <div>
                       <strong>Attachments:</strong>
                       <ul className="list-disc list-inside mt-1 space-y-1">
-                        {complaint.attachments.map(att => (
-                          <li key={att.id} className="text-primary hover:underline text-xs">
-                            <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                              <Paperclip className="h-3 w-3 mr-1.5 inline-block flex-shrink-0" /> {att.fileName}
-                            </a>
-                          </li>
-                        ))}
+                        {complaint.attachments.map(att => {
+                          console.log("[AdminModal] Rendering attachment. ID:", att.id, "URL:", att.url); // DEBUG LOG
+                          return (
+                            <li key={att.id} className="text-primary hover:underline text-xs">
+                              <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
+                                <Paperclip className="h-3 w-3 mr-1.5 inline-block flex-shrink-0" /> {att.fileName}
+                              </a>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}
@@ -409,7 +412,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
-                  <CardContent className="space-y-2 text-xs p-4"> {/* Removed max-h-48 overflow-y-auto */}
+                  <CardContent className="space-y-2 text-xs p-4">
                     {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
                       <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
                         <p className="font-semibold">
