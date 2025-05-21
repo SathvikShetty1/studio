@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Complaint, User, ComplaintCategory, ComplaintNote } from '@/types';
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
-import { getAllMockUsers } from '@/lib/mock-data';
+import { getAllMockUsers, updateMockComplaint as updateComplaintInStorage } from '@/lib/mock-data'; // Renamed for clarity
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,10 +48,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
   const allUsers = useMemo(() => getAllMockUsers(), []);
   const allEngineers = useMemo(() => allUsers.filter(u => u.role === UserRole.Engineer), [allUsers]);
-
   const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>(allEngineers);
   const [availableStatuses, setAvailableStatuses] = useState<ComplaintStatus[]>(Object.values(ComplaintStatus));
-
 
   useEffect(() => {
     if (complaint) {
@@ -72,42 +70,46 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             );
           } else {
             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-             if (displayEngineers.length === 0) { 
-                 displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
+            if (displayEngineers.length === 0) {
+              displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
             }
           }
         }
       }
       setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers);
-      
+
       let statuses: ComplaintStatus[] = Object.values(ComplaintStatus);
       if (complaint.status === ComplaintStatus.Resolved) {
         statuses = [ComplaintStatus.Resolved, ComplaintStatus.Closed, ComplaintStatus.Reopened];
       } else if (complaint.status === ComplaintStatus.Closed) {
         statuses = [ComplaintStatus.Closed, ComplaintStatus.Reopened];
       } else if (complaint.status === ComplaintStatus.Reopened) {
-         statuses = [ComplaintStatus.Reopened, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned, ComplaintStatus.InProgress];
+        statuses = [ComplaintStatus.Reopened, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned, ComplaintStatus.InProgress];
       } else if (complaint.status === ComplaintStatus.Escalated) {
         statuses = [ComplaintStatus.Escalated, ComplaintStatus.Assigned, ComplaintStatus.InProgress, ComplaintStatus.Resolved, ComplaintStatus.Unresolved];
       } else if (complaint.status === ComplaintStatus.Unresolved) {
         statuses = [ComplaintStatus.Unresolved, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned];
       }
       setAvailableStatuses(statuses);
-
     } else {
       setEngineersForAssignment(allEngineers);
       setAvailableStatuses(Object.values(ComplaintStatus));
     }
   }, [complaint, allEngineers, allUsers]);
 
-
   if (!complaint) return null;
 
   const handleSave = () => {
-    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", selectedEngineerId, "Engineer found:", allUsers.find(e => e.id === (selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId))?.name);
+    if (!adminUser) {
+      toast({ title: "Error", description: "Admin user not found. Cannot save changes.", variant: "destructive" });
+      return;
+    }
+    console.log("[AdminModal][handleSave] Attempting to save. Selected Engineer ID:", selectedEngineerId);
     
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
     const assignedEngineer = finalSelectedEngineerId ? allUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
+    console.log("[AdminModal][handleSave] Assigned Engineer Object:", assignedEngineer ? {id: assignedEngineer.id, name: assignedEngineer.name, level: assignedEngineer.engineerLevel} : 'None');
+
 
     let newStatus = currentStatus || complaint.status;
     let newPriority = selectedPriority || complaint.priority;
@@ -132,8 +134,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       newResolvedAt = undefined; 
       newNotes.push({
         id: `note-adminreopen-${Date.now()}`,
-        userId: adminUser?.id || 'unknown-admin',
-        userName: adminUser?.name || 'Admin',
+        userId: adminUser.id,
+        userName: adminUser.name,
         text: `Complaint reopened by admin. Original status: ${complaint.status}.`,
         timestamp: new Date(),
         isInternal: true 
@@ -147,8 +149,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       }
       newNotes.push({
         id: `note-adminclose-${Date.now()}`,
-        userId: adminUser?.id || 'unknown-admin',
-        userName: adminUser?.name || 'Admin',
+        userId: adminUser.id,
+        userName: adminUser.name,
         text: `Complaint closed by admin. Previous status: ${complaint.status}.`,
         timestamp: new Date(),
         isInternal: true
@@ -171,8 +173,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             ...newNotes,
             {
               id: `note-${Date.now()}`,
-              userId: adminUser?.id || 'unknown-admin',
-              userName: adminUser?.name || 'Admin',
+              userId: adminUser.id,
+              userName: adminUser.name,
               text: internalNote,
               timestamp: new Date(),
               isInternal: true
@@ -180,7 +182,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           ]
         : newNotes,
     };
-    onUpdateComplaint(updatedComplaint);
+    
+    console.log("[AdminModal][handleSave] Final updatedComplaint object being passed to onUpdateComplaint:", JSON.stringify(updatedComplaint, null, 2));
+    updateComplaintInStorage(complaint.id, updatedComplaint); // Direct call to localStorage update
+    onUpdateComplaint(updatedComplaint); // Call prop to update parent state if needed
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
     onClose();
   };
@@ -208,6 +213,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       assignedToName: undefined,
       currentHandlerLevel: undefined,
     };
+    updateComplaintInStorage(complaint.id, escalatedComplaint);
     onUpdateComplaint(escalatedComplaint);
     setCurrentStatus(ComplaintStatus.Escalated); 
     setSelectedPriority(ComplaintPriorityEnum.Escalated);
@@ -219,7 +225,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0"> {/* Ensure header does not shrink */}
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2">
             <span>Manage complaint status, priority, assignment, and add internal notes.</span>
@@ -231,7 +237,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0"> 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4"> 
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 pr-1"> {/* Added pr-1 to give slight space for scrollbar if it appears */}
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -370,15 +376,19 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </div>
         </ScrollArea>
 
-        <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0"> {/* Ensure footer does not shrink */}
-          {(complaint.status !== ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Resolved) && (
-            <Button variant="destructive" onClick={handleEscalateAction} className="mr-auto sm:mr-2 mb-2 sm:mb-0">
-              <AlertTriangle className="mr-2 h-4 w-4" />
-              Escalate Complaint
-            </Button>
-          )}
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>Save Changes</Button>
+        <DialogFooter className="pt-4 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center w-full gap-2">
+            {(complaint.status !== ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Escalated && complaint.status !== ComplaintStatus.Resolved) && (
+              <Button variant="destructive" onClick={handleEscalateAction} className="w-full sm:w-auto">
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Escalate Complaint
+              </Button>
+            )}
+            <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
+              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={handleSave} className="w-full sm:w-auto">Save Changes</Button>
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
