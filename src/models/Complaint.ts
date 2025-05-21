@@ -1,13 +1,24 @@
 
 // src/models/Complaint.ts
 import mongoose, { Schema, Document, models, Model } from 'mongoose';
-import type { Complaint as ComplaintType, ComplaintCategory, ComplaintStatus, ComplaintPriority, ComplaintAttachment, ComplaintNote, EngineerLevel } from '@/types';
+// Import enums as values, and other types as types
+import { 
+  ComplaintCategory, 
+  ComplaintStatus, 
+  ComplaintPriority, 
+  EngineerLevel 
+} from '@/types';
+import type { 
+  Complaint as ComplaintType, 
+  ComplaintAttachment as ComplaintAttachmentType, // Use alias if needed for clarity in schema
+  ComplaintNote as ComplaintNoteType // Use alias if needed for clarity in schema
+} from '@/types';
 
 export interface ComplaintDocument extends Omit<ComplaintType, 'id' | 'customerId' | 'assignedTo' | 'internalNotes'>, Document {
   _id: mongoose.Types.ObjectId;
   customerId: mongoose.Types.ObjectId; // Reference to User model
   assignedTo?: mongoose.Types.ObjectId; // Reference to User model (engineer)
-  internalNotes?: Array<Omit<ComplaintNote, 'id' | 'userId'> & {
+  internalNotes?: Array<Omit<ComplaintNoteType, 'id' | 'userId'> & {
     _id?: mongoose.Types.ObjectId; // Mongoose adds _id to subdocuments by default
     userId: mongoose.Types.ObjectId; // Reference to User model
   }>;
@@ -15,14 +26,14 @@ export interface ComplaintDocument extends Omit<ComplaintType, 'id' | 'customerI
   updatedAt?: Date;
 }
 
-const ComplaintAttachmentSchema = new Schema<ComplaintAttachment>({
+const ComplaintAttachmentSchema = new Schema<ComplaintAttachmentType>({
   // id is not needed as _id will be generated if made a subdocument, or manage manually if not
   fileName: { type: String, required: true },
   fileType: { type: String, required: true },
   url: { type: String, required: true }, // Will store data URI or future file storage URL
 }, { _id: true }); // Mongoose adds _id to subdocuments by default, can be set to false if not desired
 
-const ComplaintNoteSchema = new Schema<Omit<ComplaintNote, 'id' | 'userId'> & { userId: mongoose.Types.ObjectId }>({
+const ComplaintNoteSchema = new Schema<Omit<ComplaintNoteType, 'id' | 'userId'> & { userId: mongoose.Types.ObjectId }>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   userName: { type: String, required: true },
   timestamp: { type: Date, required: true },
