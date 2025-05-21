@@ -28,12 +28,35 @@ import { Input } from "@/components/ui/input";
 import { UploadCloud } from "lucide-react";
 import type { ComplaintAttachment } from '@/types';
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain"];
+
 const formSchema = z.object({
   reason: z.string().min(10, {
     message: "Reopen reason must be at least 10 characters.",
   }).max(1000, { message: "Reopen reason must not exceed 1000 characters."}),
-  attachments: z.custom<FileList>((val) => val instanceof FileList, "Please upload a file list").optional(),
+  attachments: z
+    .custom<FileList>((val) => val instanceof FileList, "Please upload a file list")
+    .optional()
+    .refine(
+      (files) => !files || Array.from(files).every((file) => file.size <= MAX_FILE_SIZE),
+      `Max file size is 5MB.`
+    )
+    .refine(
+      (files) => !files || Array.from(files).every((file) => ALLOWED_FILE_TYPES.includes(file.type)),
+      "Only .jpg, .jpeg, .png, .gif, .pdf, .txt files are allowed."
+    ),
 });
+
+// Helper function to read file as Data URL
+const readFileAsDataURL = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 interface RequestReopenModalProps {
   complaintId: string | null;
@@ -55,30 +78,32 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      const names = Array.from(files).map(file => file.name);
-      setFileNames(names);
       form.setValue("attachments", files); // Set the FileList object for react-hook-form
+      setFileNames(Array.from(files).map(file => file.name));
     } else {
-      setFileNames([]);
       form.setValue("attachments", undefined);
+      setFileNames([]);
     }
   };
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!complaintId) return;
 
     const newAttachments: ComplaintAttachment[] = [];
     if (values.attachments) {
-      Array.from(values.attachments).forEach(file => {
-        // In a real app, you'd upload the file and get a URL.
-        // For localStorage, we'll just store the name and a placeholder URL.
-        newAttachments.push({
-          id: `attach-reopen-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          fileName: file.name,
-          fileType: file.type,
-          url: '#placeholder-reopen-attachment', // Placeholder URL
-        });
-      });
+      for (const file of Array.from(values.attachments)) {
+         try {
+          const dataUrl = await readFileAsDataURL(file);
+          newAttachments.push({
+            id: `attach-reopen-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            fileName: file.name,
+            fileType: file.type,
+            url: dataUrl, 
+          });
+        } catch (error) {
+          console.error("Error reading file for reopen:", file.name, error);
+        }
+      }
     }
     onSubmitReopen(complaintId, values.reason, newAttachments);
     form.reset();
@@ -125,7 +150,7 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
             <FormField
               control={form.control}
               name="attachments"
-              render={() => ( // field is not directly used for file input value
+              render={() => ( 
                 <FormItem>
                   <FormLabel>New Supporting Documents (Optional)</FormLabel>
                   <FormControl>
@@ -141,11 +166,18 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
                           ) : (
                             <>
                               <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                              <p className="text-xs text-muted-foreground">SVG, PNG, JPG or PDF (MAX. 5MB)</p>
+                              <p className="text-xs text-muted-foreground">Images, PDF, TXT (MAX. 5MB)</p>
                             </>
                           )}
                         </div>
-                        <Input id="reopen-dropzone-file" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx,.txt" />
+                        <Input 
+                          id="reopen-dropzone-file" 
+                          type="file" 
+                          multiple 
+                          className="hidden" 
+                          onChange={handleFileChange} 
+                          accept={ALLOWED_FILE_TYPES.join(",")}
+                        />
                       </label>
                     </div>
                   </FormControl>

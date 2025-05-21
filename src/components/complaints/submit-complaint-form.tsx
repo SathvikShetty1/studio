@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,12 +17,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Complaint } from "@/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Complaint, ComplaintAttachment } from "@/types";
 import { ComplaintCategory, ComplaintStatus } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { UploadCloud } from "lucide-react";
 import { useState } from "react";
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain"];
 
 const formSchema = z.object({
   category: z.nativeEnum(ComplaintCategory, {
@@ -30,16 +34,36 @@ const formSchema = z.object({
   description: z.string().min(10, {
     message: "Description must be at least 10 characters.",
   }).max(2000, { message: "Description must not exceed 2000 characters."}),
-  attachments: z.any().optional(), // Placeholder for file uploads
+  attachments: z
+    .custom<FileList>((val) => val instanceof FileList, "Please upload a file list")
+    .optional()
+    .refine(
+      (files) => !files || Array.from(files).every((file) => file.size <= MAX_FILE_SIZE),
+      `Max file size is 5MB.`
+    )
+    .refine(
+      (files) => !files || Array.from(files).every((file) => ALLOWED_FILE_TYPES.includes(file.type)),
+      "Only .jpg, .jpeg, .png, .gif, .pdf, .txt files are allowed."
+    ),
 });
 
 interface SubmitComplaintFormProps {
   onComplaintSubmitted: (complaint: Complaint) => void;
 }
 
+// Helper function to read file as Data URL
+const readFileAsDataURL = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFormProps) {
   const { user } = useAuth();
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileNames, setFileNames] = useState<string[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -48,11 +72,39 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      form.setValue("attachments", files);
+      setFileNames(Array.from(files).map(file => file.name));
+    } else {
+      form.setValue("attachments", undefined);
+      setFileNames([]);
+    }
+  };
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user) {
-      // Handle case where user is not logged in, though AuthProvider should prevent this
       alert("User not logged in!");
       return;
+    }
+
+    const processedAttachments: ComplaintAttachment[] = [];
+    if (values.attachments) {
+      for (const file of Array.from(values.attachments)) {
+        try {
+          const dataUrl = await readFileAsDataURL(file);
+          processedAttachments.push({
+            id: `attach-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            fileName: file.name,
+            fileType: file.type,
+            url: dataUrl,
+          });
+        } catch (error) {
+          console.error("Error reading file:", file.name, error);
+          // Optionally, show a toast to the user about the failed file
+        }
+      }
     }
 
     const newComplaint: Complaint = {
@@ -64,22 +116,13 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
       submittedAt: new Date(),
       updatedAt: new Date(),
       status: ComplaintStatus.Submitted,
-      attachments: fileName ? [{ id: `attach-${Date.now()}`, fileName: fileName, fileType: 'unknown', url: '#' }] : [],
+      attachments: processedAttachments,
     };
 
     onComplaintSubmitted(newComplaint);
     form.reset();
-    setFileName(null);
+    setFileNames([]);
   }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setFileName(event.target.files[0].name);
-      // In a real app, you'd handle the upload here
-    } else {
-      setFileName(null);
-    }
-  };
 
   return (
     <Card className="shadow-md">
@@ -134,7 +177,7 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
             <FormField
               control={form.control}
               name="attachments"
-              render={({ field }) => ( // field is not directly used for file input value due to its nature
+              render={() => (
                 <FormItem>
                   <FormLabel>Supporting Documents/Images (Optional)</FormLabel>
                   <FormControl>
@@ -142,16 +185,26 @@ export function SubmitComplaintForm({ onComplaintSubmitted }: SubmitComplaintFor
                         <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-secondary hover:bg-muted border-input">
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                 <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
-                                {fileName ? (
-                                  <p className="text-sm text-foreground"><span className="font-semibold">Selected:</span> {fileName}</p>
+                                {fileNames.length > 0 ? (
+                                  <div className="text-sm text-foreground text-center">
+                                    <p className="font-semibold">Selected:</p>
+                                    {fileNames.map((name, idx) => <p key={idx} className="text-xs truncate max-w-xs">{name}</p>)}
+                                  </div>
                                 ) : (
                                   <>
                                     <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                    <p className="text-xs text-muted-foreground">SVG, PNG, JPG or PDF (MAX. 5MB)</p>
+                                    <p className="text-xs text-muted-foreground">Images, PDF, TXT (MAX. 5MB)</p>
                                   </>
                                 )}
                             </div>
-                            <Input id="dropzone-file" type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx,.txt" />
+                            <Input 
+                              id="dropzone-file" 
+                              type="file" 
+                              className="hidden" 
+                              onChange={handleFileChange} 
+                              multiple
+                              accept={ALLOWED_FILE_TYPES.join(",")}
+                            />
                         </label>
                     </div> 
                   </FormControl>
