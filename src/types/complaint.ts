@@ -11,7 +11,7 @@ export enum ComplaintPriority {
   Low = 'Low',
   Medium = 'Medium',
   High = 'High',
-  Escalated = 'Escalated', // Changed from Critical to Escalated
+  Escalated = 'Escalated',
 }
 
 export enum ComplaintStatus {
@@ -23,6 +23,7 @@ export enum ComplaintStatus {
   Unresolved = 'Unresolved',
   Closed = 'Closed',
   Escalated = 'Escalated',
+  Reopened = 'Reopened', // Added Reopened status
 }
 
 export interface ComplaintAttachment {
@@ -35,7 +36,7 @@ export interface ComplaintAttachment {
 export interface ComplaintNote {
   id: string;
   userId: string; // ID of the staff member who added the note
-  userName: string; 
+  userName: string;
   timestamp: Date;
   text: string;
   isInternal: boolean; // True for staff-only notes
