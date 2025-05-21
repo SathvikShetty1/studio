@@ -7,11 +7,11 @@ import {
   ComplaintStatus, 
   ComplaintPriority, 
   EngineerLevel 
-} from '@/types';
+} from '@/types'; // Ensure this is a value import for enums
 import type { 
   Complaint as ComplaintType, 
-  ComplaintAttachment as ComplaintAttachmentType, // Use alias if needed for clarity in schema
-  ComplaintNote as ComplaintNoteType // Use alias if needed for clarity in schema
+  ComplaintAttachment as ComplaintAttachmentType,
+  ComplaintNote as ComplaintNoteType
 } from '@/types';
 
 export interface ComplaintDocument extends Omit<ComplaintType, 'id' | 'customerId' | 'assignedTo' | 'internalNotes'>, Document {
@@ -22,16 +22,14 @@ export interface ComplaintDocument extends Omit<ComplaintType, 'id' | 'customerI
     _id?: mongoose.Types.ObjectId; // Mongoose adds _id to subdocuments by default
     userId: mongoose.Types.ObjectId; // Reference to User model
   }>;
-  createdAt?: Date;
-  updatedAt?: Date;
+  // createdAt and updatedAt are handled by timestamps: true
 }
 
 const ComplaintAttachmentSchema = new Schema<ComplaintAttachmentType>({
-  // id is not needed as _id will be generated if made a subdocument, or manage manually if not
   fileName: { type: String, required: true },
   fileType: { type: String, required: true },
-  url: { type: String, required: true }, // Will store data URI or future file storage URL
-}, { _id: true }); // Mongoose adds _id to subdocuments by default, can be set to false if not desired
+  url: { type: String, required: true }, 
+}, { _id: true }); 
 
 const ComplaintNoteSchema = new Schema<Omit<ComplaintNoteType, 'id' | 'userId'> & { userId: mongoose.Types.ObjectId }>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -50,7 +48,7 @@ const ComplaintSchema = new Schema<ComplaintDocument>(
     description: { type: String, required: true },
     attachments: [ComplaintAttachmentSchema],
     submittedAt: { type: Date, default: Date.now, required: true },
-    updatedAt: { type: Date, default: Date.now, required: true },
+    // updatedAt will be handled by timestamps: true and pre-save/pre-update hooks
     status: { type: String, enum: Object.values(ComplaintStatus), required: true },
     priority: { type: String, enum: Object.values(ComplaintPriority), sparse: true },
     assignedTo: { type: Schema.Types.ObjectId, ref: 'User', sparse: true },
@@ -65,22 +63,21 @@ const ComplaintSchema = new Schema<ComplaintDocument>(
       comment: { type: String },
     },
   },
-  { timestamps: true } // Adds createdAt and updatedAt
+  { timestamps: true } // Adds createdAt and updatedAt automatically
 );
 
+// Middleware to update `updatedAt` on save/update operations if not automatically handled sufficiently by {timestamps: true} for all cases
 ComplaintSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
+  if (this.isModified()) { // only update if document changed to avoid unnecessary updates
+    this.updatedAt = new Date();
+  }
   next();
 });
 
-ComplaintSchema.pre('updateOne', function(next) {
-  this.set({ updatedAt: new Date() });
-  next();
-});
-ComplaintSchema.pre('findOneAndUpdate', function(next) {
-  this.set({ updatedAt: new Date() });
-  next();
-});
+// For findOneAndUpdate, updateOne, etc. this needs to be handled differently if you want to trigger middleware.
+// However, {timestamps: true} often suffices. If specific updates are not triggering `updatedAt`,
+// you might need to explicitly set it in those update operations in your API routes.
+// The pre 'save' hook above primarily affects new documents and full document updates via .save().
 
 
 const ComplaintModel: Model<ComplaintDocument> = models.Complaint || mongoose.model<ComplaintDocument>('Complaint', ComplaintSchema);
