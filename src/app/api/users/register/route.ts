@@ -9,14 +9,16 @@ import type { User, UserRole, EngineerLevel } from '@/types';
 export async function POST(req: NextRequest) {
   try {
     await dbConnect();
-    const { name, email, password, role, engineerLevel, avatar } = await req.json() as {
+    const body = await req.json() as {
         name: string;
         email: string;
-        password?: string; // Password might not be sent if using OAuth later
+        password?: string;
         role: UserRole;
         engineerLevel?: EngineerLevel;
         avatar?: string;
     };
+
+    const { name, email, password, role, engineerLevel, avatar } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
@@ -36,13 +38,12 @@ export async function POST(req: NextRequest) {
       passwordHash,
       role,
       engineerLevel: role === UserRole.Engineer ? engineerLevel : undefined,
-      avatar: avatar || `https://picsum.photos/seed/${email}/40/40`, // Default avatar
+      avatar: avatar || `https://picsum.photos/seed/${encodeURIComponent(email)}/40/40`, // Default avatar
     });
 
     await newUser.save();
     
-    // Don't send passwordHash back to client
-    const userResponse = {
+    const userResponse: User = {
         id: newUser._id.toString(),
         name: newUser.name,
         email: newUser.email,
@@ -53,11 +54,23 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ message: 'User registered successfully', user: userResponse }, { status: 201 });
   } catch (error) {
-    console.error('Registration error:', error);
-    let errorMessage = 'An unexpected error occurred during registration.';
+    console.error('Registration API Error:', error); // More specific log prefix
+    let detail = 'An unexpected error occurred during registration.';
     if (error instanceof Error) {
-        errorMessage = error.message;
+        detail = error.message;
+    } else if (typeof error === 'string') {
+        detail = error;
+    } else if (typeof error === 'object' && error !== null && 'toString' in error) {
+        // Attempt to get a string representation of the error
+        detail = (error as { toString: () => string }).toString();
     }
-    return NextResponse.json({ message: 'Server error during registration', error: errorMessage }, { status: 500 });
+
+    // Ensure the object passed to NextResponse.json is always simple
+    const errorResponsePayload = {
+        message: 'Server error during registration.',
+        errorDetail: detail,
+    };
+    console.error('Sending error response payload:', errorResponsePayload);
+    return NextResponse.json(errorResponsePayload, { status: 500 });
   }
 }
