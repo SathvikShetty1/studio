@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-// Removed ScrollArea import as we are trying a direct CSS scroll
+// ScrollArea is not used in this "old-school CSS scroll" approach
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
@@ -69,12 +69,18 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else {
-             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
+            // If current assignee is already Executive, allow re-assigning to other Executives only
+             displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
+             if (displayEngineers.length === 0) { // If no other execs, show current exec (effectively no change)
+                 displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
+             }
           }
         }
       } else if (complaint.status === ComplaintStatus.Escalated && !complaint.assignedTo) {
+        // If escalated and no one assigned, show Senior or Executive
         displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Senior || eng.engineerLevel === EngineerLevel.Executive);
-      } else if (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Reopened) {
+      } else if (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Reopened || complaint.status === ComplaintStatus.Submitted) {
+        // For these statuses, allow assignment to any engineer
         displayEngineers = allEngineers;
       }
 
@@ -103,11 +109,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     }
   }, [complaint, allEngineers, allUsers]);
 
-  if (!complaint) return null;
-
   const handleSave = () => {
-    if (!adminUser) {
-      toast({ title: "Error", description: "Admin user not found. Cannot save changes.", variant: "destructive" });
+    if (!adminUser || !complaint) {
+      toast({ title: "Error", description: "Admin user or complaint not found. Cannot save changes.", variant: "destructive" });
       return;
     }
     
@@ -119,6 +123,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     let newResolutionDetails = complaint.resolutionDetails;
     let newResolvedAt = complaint.resolvedAt;
     let newNotes = complaint.internalNotes || [];
+    let newCurrentHandlerLevel = assignedEngineerDetails?.engineerLevel || complaint.currentHandlerLevel;
 
     if (finalSelectedEngineerId && 
         (newStatus === ComplaintStatus.PendingAssignment || 
@@ -129,6 +134,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       newStatus = ComplaintStatus.Assigned;
     } else if (!finalSelectedEngineerId && newStatus === ComplaintStatus.Assigned) {
       newStatus = ComplaintStatus.PendingAssignment;
+      newCurrentHandlerLevel = undefined; // No handler if unassigned
     }
     
     if (currentStatus === ComplaintStatus.Reopened && complaint.status !== ComplaintStatus.Reopened) {
@@ -143,7 +149,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         timestamp: new Date(),
         isInternal: false, 
       });
-      if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment;
+      if (!finalSelectedEngineerId) {
+        newStatus = ComplaintStatus.PendingAssignment;
+        newCurrentHandlerLevel = undefined;
+      }
     }
 
     if (currentStatus === ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Closed) {
@@ -165,7 +174,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       priority: newPriority,
       assignedTo: finalSelectedEngineerId,
       assignedToName: assignedEngineerDetails?.name,
-      currentHandlerLevel: assignedEngineerDetails?.engineerLevel,
+      currentHandlerLevel: newCurrentHandlerLevel,
       status: newStatus,
       resolutionTimeline: resolutionTimeline ? new Date(resolutionTimeline) : undefined,
       resolvedAt: newResolvedAt,
@@ -189,6 +198,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     updateMockComplaint(complaint.id, updatedComplaintData); 
     onUpdateComplaint(updatedComplaintData); 
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
+    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", finalSelectedEngineerId, "Engineer found:", assignedEngineerDetails?.name);
     onClose();
   };
 
@@ -209,14 +219,19 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         if (currentLevelIndex < engineerLevelOrder.length - 1) {
             nextLevel = engineerLevelOrder[currentLevelIndex + 1];
         } else {
-            toast({ title: "Max Level Reached", description: "Complaint is already at the highest engineer level.", variant: "default" });
+            // Already at Executive, but not unresolved. Can still mark as Escalated for visibility / special queue
+            toast({ title: "Max Level", description: "Complaint is already at Executive level. Marking as 'Escalated'.", variant: "default" });
             setCurrentStatus(ComplaintStatus.Escalated);
             setSelectedPriority(ComplaintPriorityEnum.Escalated);
-            setSelectedEngineerId(UNASSIGNED_VALUE); 
+            // Allow assigning to any executive if it's just marked escalated at exec level
             setEngineersForAssignment(allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive));
             return;
         }
+    } else {
+      // No current handler, default escalation target to Junior or above
+      nextLevel = EngineerLevel.Junior;
     }
+
 
     const escalatedComplaint: Complaint = {
       ...complaint,
@@ -229,14 +244,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           id: `note-escalate-${Date.now()}`,
           userId: adminUser.id,
           userName: adminUser.name,
-          text: `Complaint escalated by admin. ${nextLevel ? `Targeting ${nextLevel} level.` : 'Marked as escalated.'} Original status: ${complaint.status}.`,
+          text: `Complaint escalated by admin. ${nextLevel ? `Targeting ${nextLevel} level or higher.` : 'Marked as escalated.'} Original status: ${complaint.status}.`,
           timestamp: new Date(),
           isInternal: true
         },
       ],
       assignedTo: undefined, 
       assignedToName: undefined,
-      currentHandlerLevel: undefined, 
+      currentHandlerLevel: undefined, // Clear current handler as it's being escalated
     };
     updateMockComplaint(complaint.id, escalatedComplaint);
     onUpdateComplaint(escalatedComplaint);
@@ -254,12 +269,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     !(complaint.currentHandlerLevel === EngineerLevel.Executive && complaint.status !== ComplaintStatus.Unresolved);
 
 
+  if (!complaint) return null;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/*
-        Ensure DialogContent has a max-height and overflow-y-auto.
-        The main content div inside will take up the available space and scroll if needed.
-      */}
       <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
@@ -271,9 +284,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             )}
           </DialogDescription>
         </DialogHeader>
-
-        {/* This div will handle the scrolling for the content between header and footer */}
-        <div className="flex-1 overflow-y-auto p-6"> {/* Added p-6 for consistent padding */}
+        
+        <div className="flex-1 overflow-y-auto p-6">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
             {/* Left Column */}
             <div className="space-y-4">
@@ -349,12 +361,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                         ) : (
                              (complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) ?
                             <SelectItem value="no_eligible_engineers" disabled>No eligible higher-level engineers</SelectItem>
-                            : <SelectItem value="no_engineers" disabled>No engineers available for this status</SelectItem>
+                            : <SelectItem value="no_engineers" disabled>No engineers available</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                     {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo && engineersForAssignment.length === 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for current escalation path. Ensure Executive engineers are registered.</p>
+                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for current escalation path. Ensure Executive engineers are registered or adjust escalation criteria.</p>
                     )}
                   </div>
 
@@ -397,7 +409,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
-                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs p-4">
+                  <CardContent className="space-y-2 text-xs p-4"> {/* Removed max-h-48 overflow-y-auto */}
                     {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
                       <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
                         <p className="font-semibold">
@@ -433,5 +445,3 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
-
-    
