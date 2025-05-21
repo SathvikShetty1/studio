@@ -218,7 +218,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2">
@@ -230,8 +230,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 bg-red-100"> 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 bg-blue-100">
+        <ScrollArea className="flex-1 min-h-0"> 
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
@@ -384,5 +384,6 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     </Dialog>
   );
 }
+    
 
     
