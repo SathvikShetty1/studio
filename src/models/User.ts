@@ -1,7 +1,8 @@
 
 // src/models/User.ts
 import mongoose, { Schema, Document, models, Model } from 'mongoose';
-import type { User as UserType, UserRole, EngineerLevel } from '@/types'; // Assuming your types are here
+import type { User as UserType } from '@/types/user'; // Assuming your types are here
+import { UserRole, EngineerLevel } from '@/types/user'; // Added this import
 
 export interface UserDocument extends Omit<UserType, 'id'>, Document {
   _id: mongoose.Types.ObjectId; // MongoDB's default ID
