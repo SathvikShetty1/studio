@@ -1,12 +1,13 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SubmitComplaintForm } from '@/components/complaints/submit-complaint-form';
 import { ComplaintCard } from '@/components/complaints/complaint-card';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { mockComplaints as allMockComplaints } from '@/lib/mock-data';
-import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react'; // Added ShieldAlert
+import { getAllMockComplaints, addComplaintToMock } from '@/lib/mock-data';
+import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -25,18 +26,35 @@ export default function CustomerDashboardPage() {
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus[]>([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      // Simulate fetching user's complaints
-      const userComplaints = allMockComplaints.filter(c => c.customerId === user.id);
+  const fetchMyComplaints = useCallback(() => {
+    console.log("[CustomerDashboardPage] fetchMyComplaints called.");
+    if (user && user.id) {
+      console.log("[CustomerDashboardPage] User found with ID:", user.id);
+      setIsLoadingComplaints(true);
+      const allComplaints = getAllMockComplaints();
+      console.log("[CustomerDashboardPage] Total complaints from getAllMockComplaints:", allComplaints.length, allComplaints);
+      const userComplaints = allComplaints.filter(c => c.customerId === user.id);
+      console.log("[CustomerDashboardPage] Filtered complaints for user:", userComplaints.length, userComplaints);
       setMyComplaints(userComplaints);
+      setIsLoadingComplaints(false);
+    } else {
+      setMyComplaints([]);
+      setIsLoadingComplaints(false);
     }
+    console.log("[CustomerDashboardPage] fetchMyComplaints finished.");
   }, [user]);
 
+  useEffect(() => {
+    console.log("[CustomerDashboardPage] useEffect for [user] triggered. User:", user?.id);
+    fetchMyComplaints();
+  }, [user, fetchMyComplaints]);
+
   const handleComplaintSubmitted = (newComplaint: Complaint) => {
-    setMyComplaints(prev => [newComplaint, ...prev]);
-    allMockComplaints.unshift(newComplaint); // Add to global mock for other roles to see
+    console.log("[CustomerDashboardPage] handleComplaintSubmitted triggered by form on this page for complaint:", newComplaint.id);
+    addComplaintToMock(newComplaint); // Save to localStorage
+    fetchMyComplaints(); // Re-fetch to update the list
     setShowSubmitForm(false);
   };
   
@@ -44,7 +62,9 @@ export default function CustomerDashboardPage() {
     statusFilter.length === 0 || statusFilter.includes(complaint.status)
   );
 
-  if (!user) return <p>Loading user data or please login.</p>;
+  if (!user) return <div className="flex items-center justify-center h-screen"><p>Loading user data or please login.</p></div>;
+  if (isLoadingComplaints) return <div className="flex items-center justify-center h-screen"><p>Loading complaints...</p></div>;
+
 
   return (
     <div className="space-y-6">
@@ -115,13 +135,14 @@ export default function CustomerDashboardPage() {
         <div className="text-center py-10">
           <ShieldAlert className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-2 text-sm font-medium text-foreground">
-            {myComplaints.length === 0 ? "No complaints filed yet." : "No complaints match current filters."}
+            {myComplaints.length === 0 && !isLoadingComplaints ? "No complaints filed yet." : "No complaints match current filters."}
           </h3>
-          {myComplaints.length === 0 && !showSubmitForm && (
+          {myComplaints.length === 0 && !showSubmitForm && !isLoadingComplaints && (
              <p className="mt-1 text-sm text-muted-foreground">
               Ready to submit your first complaint? Click the button above.
             </p>
           )}
+           {isLoadingComplaints && <p>Checking for complaints...</p>}
         </div>
       )}
     </div>

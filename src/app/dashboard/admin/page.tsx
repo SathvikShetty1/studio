@@ -4,49 +4,37 @@
 import { useState, useEffect } from 'react';
 import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { mockComplaints as initialMockComplaints } from '@/lib/mock-data';
+import { getAllMockComplaints, updateMockComplaint, deleteMockComplaint } from '@/lib/mock-data';
 import { ComplaintTableAdmin } from '@/components/admin/complaint-table-admin';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, ListChecks, Users, ChevronsUp } from 'lucide-react'; // Added ChevronsUp for Escalated
+import { AlertTriangle, CheckCircle, ListChecks, Users, ChevronsUp } from 'lucide-react';
 import { ComplaintStatus } from '@/types';
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
-  // Initialize with a copy of the current state of initialMockComplaints
-  const [allComplaints, setAllComplaints] = useState<Complaint[]>(() => [...initialMockComplaints]);
+  const [allComplaints, setAllComplaints] = useState<Complaint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Effect to update `allComplaints` if the source array's content (any complaint object) changes,
-  // or if its length changes (e.g., new complaint added/deleted).
+  const fetchAllComplaints = () => {
+    setIsLoading(true);
+    const complaints = getAllMockComplaints();
+    setAllComplaints(complaints);
+    setIsLoading(false);
+  };
+
   useEffect(() => {
-    // This creates a shallow copy. If mockComplaints objects are mutated directly elsewhere,
-    // this might not pick up changes if the array reference itself or length doesn't change.
-    // A more robust way would be to deep compare or use a version/timestamp if objects are complex.
-    // For this mock setup, we assume mockComplaints array itself is the source of truth that gets modified.
-    setAllComplaints([...initialMockComplaints]);
-  }, [initialMockComplaints, initialMockComplaints.length]); // React to additions/deletions and content changes if the array reference changes
+    fetchAllComplaints();
+  }, []);
 
   const handleUpdateComplaint = (updatedComplaint: Complaint) => {
-    // Update the global mock data first
-    const index = initialMockComplaints.findIndex(c => c.id === updatedComplaint.id);
-    if (index !== -1) {
-      initialMockComplaints[index] = updatedComplaint;
-      // Trigger re-render by creating a new array reference for state
-      setAllComplaints([...initialMockComplaints]);
-    } else {
-      // If somehow the complaint is new (should not happen via this handler)
-      initialMockComplaints.unshift(updatedComplaint);
-      setAllComplaints([...initialMockComplaints]);
-    }
+    updateMockComplaint(updatedComplaint.id, updatedComplaint);
+    fetchAllComplaints(); // Re-fetch to update the list
   };
 
   const handleDeleteComplaint = (complaintId: string) => {
-    const newComplaintsList = initialMockComplaints.filter(c => c.id !== complaintId)
-    // Update global mock data first by replacing its contents
-    initialMockComplaints.length = 0; // Clear array
-    initialMockComplaints.push(...newComplaintsList); // Repopulate
-    
-    setAllComplaints([...initialMockComplaints]); // Update local state
+    deleteMockComplaint(complaintId);
+    fetchAllComplaints(); // Re-fetch to update the list
   };
   
   const stats = {
@@ -68,10 +56,12 @@ export default function AdminDashboardPage() {
     escalated: allComplaints.filter(c => c.status === ComplaintStatus.Escalated).length,
   };
 
-
   if (!user || user.role !== 'admin') {
-    // Should be handled by AuthProvider & layout, but as a safeguard:
     return <p className="p-4">Access Denied. You must be an admin to view this page.</p>;
+  }
+
+  if (isLoading) {
+    return <div className="p-4">Loading complaints...</div>;
   }
 
   return (
