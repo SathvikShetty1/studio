@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// Removed ScrollArea import as we are trying a direct CSS scroll
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
@@ -69,16 +69,12 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else {
-            // If current assignee is Executive, allow re-assigning to other Executives or unassigning.
              displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
           }
         }
       } else if (complaint.status === ComplaintStatus.Escalated && !complaint.assignedTo) {
-        // If escalated and unassigned, show engineers matching the target level of escalation (if defined) or higher
-        // This part depends on how you define target escalation level. For now, show Senior/Executive.
         displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Senior || eng.engineerLevel === EngineerLevel.Executive);
       } else if (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Reopened) {
-        // For pending or reopened, show all engineers
         displayEngineers = allEngineers;
       }
 
@@ -145,7 +141,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         userName: adminUser.name,
         text: `Complaint reopened by admin. Original status: ${complaint.status}.`,
         timestamp: new Date(),
-        isInternal: false, // Customer initiated context, admin is actioning it
+        isInternal: false, 
       });
       if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment;
     }
@@ -164,7 +160,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       });
     }
     
-    const updatedComplaint: Complaint = {
+    const updatedComplaintData: Complaint = {
       ...complaint,
       priority: newPriority,
       assignedTo: finalSelectedEngineerId,
@@ -190,8 +186,8 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         : newNotes,
     };
     
-    updateMockComplaint(complaint.id, updatedComplaint); // Assuming this updates localStorage
-    onUpdateComplaint(updatedComplaint); 
+    updateMockComplaint(complaint.id, updatedComplaintData); 
+    onUpdateComplaint(updatedComplaintData); 
     toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
     onClose();
   };
@@ -214,11 +210,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             nextLevel = engineerLevelOrder[currentLevelIndex + 1];
         } else {
             toast({ title: "Max Level Reached", description: "Complaint is already at the highest engineer level.", variant: "default" });
-            // Keep status as Escalated, allow re-assignment to another Executive or unassign
             setCurrentStatus(ComplaintStatus.Escalated);
             setSelectedPriority(ComplaintPriorityEnum.Escalated);
             setSelectedEngineerId(UNASSIGNED_VALUE); 
-            // Update available engineers to only show executives if current is executive
             setEngineersForAssignment(allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive));
             return;
         }
@@ -249,21 +243,24 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
     setCurrentStatus(ComplaintStatus.Escalated); 
     setSelectedPriority(ComplaintPriorityEnum.Escalated);
     setSelectedEngineerId(UNASSIGNED_VALUE);
-    // Filter engineers for assignment to the next level or higher
     setEngineersForAssignment(allEngineers.filter(eng => 
         eng.engineerLevel && nextLevel && engineerLevelOrder.indexOf(eng.engineerLevel) >= engineerLevelOrder.indexOf(nextLevel)
     ));
     toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${ComplaintStatus.Escalated}. Please assign to an appropriate ${nextLevel || ''} engineer.` });
   };
   
-  // canEscalate: complaint is not closed/resolved, and not already at max executive level (unless it's unresolved and already assigned to exec)
   const canEscalate = complaint && 
     ![ComplaintStatus.Closed, ComplaintStatus.Resolved].includes(complaint.status) &&
     !(complaint.currentHandlerLevel === EngineerLevel.Executive && complaint.status !== ComplaintStatus.Unresolved);
 
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      {/*
+        Ensure DialogContent has a max-height and overflow-y-auto.
+        The main content div inside will take up the available space and scroll if needed.
+      */}
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2 pt-1 text-sm">
@@ -275,8 +272,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0"> {/* SCROLLABLE AREA STARTS HERE */}
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 py-4 px-6">
+        {/* This div will handle the scrolling for the content between header and footer */}
+        <div className="flex-1 overflow-y-auto p-6"> {/* Added p-6 for consistent padding */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
             {/* Left Column */}
             <div className="space-y-4">
               <Card>
@@ -298,7 +296,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md whitespace-pre-wrap">{complaint.description}</p>
                   </div>
-                   {complaint.resolutionDetails && (
+                  {complaint.resolutionDetails && (
                     <div>
                       <strong className="block mb-1">Resolution Notes (from Engineer):</strong>
                       <p className="mt-1 p-2 bg-secondary rounded-md text-sm whitespace-pre-wrap">{complaint.resolutionDetails}</p>
@@ -399,7 +397,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
-                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs p-4"> {/* Added p-4 for padding */}
+                  <CardContent className="max-h-48 overflow-y-auto space-y-2 text-xs p-4">
                     {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
                       <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
                         <p className="font-semibold">
@@ -415,7 +413,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               )}
             </div>
           </div>
-        </ScrollArea> {/* SCROLLABLE AREA ENDS HERE */}
+        </div>
 
         <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center w-full gap-2">
