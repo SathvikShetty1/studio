@@ -4,10 +4,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SubmitComplaintForm } from '@/components/complaints/submit-complaint-form';
 import { ComplaintCard } from '@/components/complaints/complaint-card';
-import type { Complaint, ComplaintNote } from '@/types';
+import type { Complaint, ComplaintNote, ComplaintAttachment } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { getAllMockComplaints, addComplaintToMock, updateMockComplaint } from '@/lib/mock-data';
-import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react'; 
+import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ComplaintStatus } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { RequestReopenModal } from '@/components/complaints/request-reopen-modal';
 
 
 export default function CustomerDashboardPage() {
@@ -30,13 +31,16 @@ export default function CustomerDashboardPage() {
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus[]>([]);
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
 
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
+  const [reopeningComplaintId, setReopeningComplaintId] = useState<string | null>(null);
+
   const fetchMyComplaints = useCallback(() => {
     console.log("[CustomerDashboardPage] fetchMyComplaints called.");
     if (user && user.id) {
       console.log("[CustomerDashboardPage] User found with ID:", user.id);
       setIsLoadingComplaints(true);
       const allComplaints = getAllMockComplaints();
-      console.log("[CustomerDashboardPage] Total complaints from getAllMockComplaints:", allComplaints.length, allComplaints);
+      console.log("[CustomerDashboardPage] Total complaints from getAllMockComplaints:", allComplaints.length, allComplaints.map(c => c.id + ":" + c.customerId));
       const userComplaints = allComplaints.filter(c => c.customerId === user.id);
       console.log("[CustomerDashboardPage] Filtered complaints for user:", userComplaints.length, userComplaints);
       setMyComplaints(userComplaints);
@@ -64,8 +68,13 @@ export default function CustomerDashboardPage() {
     });
   };
 
-  const handleRequestReopen = (complaintId: string) => {
-    const complaintToReopen = myComplaints.find(c => c.id === complaintId);
+  const openReopenModal = (complaintId: string) => {
+    setReopeningComplaintId(complaintId);
+    setIsReopenModalOpen(true);
+  };
+
+  const handleConfirmReopenRequest = (complaintIdToReopen: string, reason: string, newAttachments: ComplaintAttachment[]) => {
+    const complaintToReopen = myComplaints.find(c => c.id === complaintIdToReopen);
     if (complaintToReopen && user) {
       const updatedComplaint: Complaint = {
         ...complaintToReopen,
@@ -77,19 +86,25 @@ export default function CustomerDashboardPage() {
             id: `note-reopenreq-${Date.now()}`,
             userId: user.id,
             userName: user.name,
-            text: "Customer requested to reopen the complaint.",
+            text: `Customer requested to reopen: "${reason}"`,
             timestamp: new Date(),
             isInternal: false, 
           } as ComplaintNote,
         ],
+        attachments: [
+          ...(complaintToReopen.attachments || []),
+          ...newAttachments,
+        ],
       };
-      updateMockComplaint(complaintId, updatedComplaint);
-      fetchMyComplaints(); // Refresh the list
+      updateMockComplaint(complaintIdToReopen, updatedComplaint);
+      fetchMyComplaints(); 
       toast({
         title: "Reopen Requested",
-        description: `Complaint #${complaintId.slice(-6)} has been flagged for reopening.`,
+        description: `Complaint #${complaintIdToReopen.slice(-6)} has been flagged for reopening.`,
       });
     }
+    setIsReopenModalOpen(false);
+    setReopeningComplaintId(null);
   };
   
   const filteredComplaints = myComplaints.filter(complaint => 
@@ -98,7 +113,7 @@ export default function CustomerDashboardPage() {
 
 
   if (!user) return <div className="flex items-center justify-center h-screen"><p>Loading user data or please login.</p></div>;
-  if (isLoadingComplaints) return <div className="flex items-center justify-center h-screen"><p>Loading complaints...</p></div>;
+  if (isLoadingComplaints && !user) return <div className="flex items-center justify-center h-screen"><p>Loading complaints...</p></div>;
 
 
   return (
@@ -169,7 +184,7 @@ export default function CustomerDashboardPage() {
             <ComplaintCard 
               key={complaint.id} 
               complaint={complaint} 
-              onRequestReopen={handleRequestReopen}
+              onOpenReopenModal={openReopenModal}
               userRole="customer"
             />
           ))}
@@ -188,6 +203,15 @@ export default function CustomerDashboardPage() {
            {isLoadingComplaints && <p>Checking for complaints...</p>}
         </div>
       )}
+      <RequestReopenModal
+        isOpen={isReopenModalOpen}
+        onClose={() => {
+            setIsReopenModalOpen(false);
+            setReopeningComplaintId(null);
+        }}
+        onSubmitReopen={handleConfirmReopenRequest}
+        complaintId={reopeningComplaintId}
+      />
     </div>
   );
 }

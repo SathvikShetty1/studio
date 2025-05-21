@@ -12,7 +12,7 @@ import { ComplaintPriority as ComplaintPriorityEnum, ComplaintStatus } from '@/t
 interface ComplaintCardProps {
   complaint: Complaint;
   onClick?: () => void; 
-  onRequestReopen?: (complaintId: string) => void;
+  onOpenReopenModal?: (complaintId: string) => void; // Changed prop name
   userRole?: 'customer' | 'admin' | 'engineer'; 
 }
 
@@ -51,7 +51,7 @@ const getPriorityColor = (priority?: ComplaintPriorityEnum) => {
   }
 };
 
-export function ComplaintCard({ complaint, onClick, onRequestReopen, userRole }: ComplaintCardProps) {
+export function ComplaintCard({ complaint, onClick, onOpenReopenModal, userRole }: ComplaintCardProps) {
   const canRequestReopen = userRole === 'customer' && 
                            (complaint.status === ComplaintStatus.Resolved || complaint.status === ComplaintStatus.Closed);
 
@@ -108,13 +108,13 @@ export function ComplaintCard({ complaint, onClick, onRequestReopen, userRole }:
                   <Paperclip className="h-3 w-3 mr-1" /> {complaint.attachments.length} attachment(s)
               </div>
           )}
-          {canRequestReopen && onRequestReopen && (
+          {canRequestReopen && onOpenReopenModal && (
             <Button 
               variant="outline" 
               size="sm" 
               onClick={(e) => { 
                 e.stopPropagation(); // Prevent card click if button is clicked
-                onRequestReopen(complaint.id); 
+                onOpenReopenModal(complaint.id); 
               }}
               className="text-xs"
             >
