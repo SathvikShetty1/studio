@@ -16,7 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-// ScrollArea is removed for old-school CSS scroll
+// ScrollArea removed for direct CSS scroll
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip } from 'lucide-react';
@@ -28,7 +28,7 @@ interface ComplaintDetailsModalEngineerProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => void;
+  onUpdateComplaint: (updatedComplaint: Complaint) => void; // Callback after successful API update
 }
 
 const engineerAllowedStatuses: ComplaintStatus[] = [
@@ -42,6 +42,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
   const [selectedStatus, setSelectedStatus] = useState<ComplaintStatus | undefined>(complaint?.status);
   const [resolutionDetails, setResolutionDetails] = useState(complaint?.resolutionDetails || '');
   const [internalNote, setInternalNote] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -52,47 +53,81 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     }
   }, [complaint]);
 
-  if (!complaint) return null;
 
-  const isTerminalStatusForEngineer = [ComplaintStatus.Closed, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Submitted].includes(complaint.status);
-
-
-  const handleSave = () => {
-    if (!engineerUser) {
-        toast({ title: "Error", description: "User not found. Cannot save changes.", variant: "destructive"});
+  const handleSave = async () => {
+    if (!engineerUser || !complaint) {
+        toast({ title: "Error", description: "User or complaint data not found.", variant: "destructive"});
         return;
     }
+    setIsSubmitting(true);
 
-    let updatedResolvedAt: Date | undefined = complaint.resolvedAt;
+    let updatedResolvedAt: Date | string | undefined = complaint.resolvedAt; // Keep as Date object for API
     if (selectedStatus === ComplaintStatus.Resolved && complaint.status !== ComplaintStatus.Resolved) {
-      updatedResolvedAt = new Date();
+      updatedResolvedAt = new Date(); // Set as Date object
     } else if (selectedStatus !== ComplaintStatus.Resolved) {
-      // Clear resolvedAt if status is changed from Resolved to something else
       updatedResolvedAt = undefined;
     }
     
-    const updatedComplaint: Complaint = {
-      ...complaint,
+    const newInternalNotes = complaint.internalNotes ? [...complaint.internalNotes] : [];
+    if (internalNote.trim()) {
+        newInternalNotes.push({
+            id: `note-frontend-${Date.now()}`, // temp frontend id
+            userId: engineerUser.id, // MongoDB _id string
+            userName: engineerUser.name,
+            text: internalNote,
+            timestamp: new Date(),
+            isInternal: true,
+        });
+    }
+
+    const updatePayload = {
       status: selectedStatus || complaint.status,
       resolutionDetails: resolutionDetails, 
-      resolvedAt: updatedResolvedAt,
-      updatedAt: new Date(),
-      internalNotes: internalNote ? [
-        ...(complaint.internalNotes || []),
-        { 
-            id: `note-${Date.now()}`, 
-            userId: engineerUser.id, 
-            userName: engineerUser.name, 
-            text: internalNote, 
-            timestamp: new Date(), 
-            isInternal: true 
-        }
-      ] : complaint.internalNotes,
+      resolvedAt: updatedResolvedAt ? new Date(updatedResolvedAt).toISOString() : undefined, // Convert to ISO string for API
+      internalNotes: newInternalNotes.map(note => ({
+          userId: note.userId,
+          userName: note.userName,
+          text: note.text,
+          timestamp: note.timestamp,
+          isInternal: note.isInternal,
+      })),
+      // assignedTo, assignedToName, currentHandlerLevel should not be changed by engineer here
+      // they are set by admin.
     };
-    onUpdateComplaint(updatedComplaint);
-    toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated by ${engineerUser.name}.` });
-    onClose();
+
+    try {
+        const response = await fetch(`/api/complaints/${complaint.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload),
+        });
+
+        if (response.ok) {
+            const updatedComplaintData = await response.json();
+            onUpdateComplaint(updatedComplaintData);
+            toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
+            onClose();
+        } else {
+            const errorData = await response.json();
+            toast({ title: "Update Failed", description: errorData.message || "Could not update complaint.", variant: "destructive"});
+        }
+    } catch (error) {
+        console.error("Error updating complaint by engineer:", error);
+        toast({ title: "Network Error", description: "Failed to connect to server.", variant: "destructive"});
+    } finally {
+        setIsSubmitting(false);
+    }
   };
+  
+  if (!isOpen || !complaint) return null; // Keep this check
+
+  const isTerminalStatusForEngineer = [
+      ComplaintStatus.Closed, 
+      ComplaintStatus.Escalated, // If escalated, admin should re-assign
+      ComplaintStatus.PendingAssignment, // Should be assigned by admin
+      ComplaintStatus.Submitted // Initial state, needs admin action
+    ].includes(complaint.status);
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -100,7 +135,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
         <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
           <DialogDescription>
-            Update the status and resolution details for this complaint. Current Engineer Level: {complaint.currentHandlerLevel || "N/A"}
+            Update the status and resolution details for this complaint. Your Level: {engineerUser?.engineerLevel || "N/A"}
           </DialogDescription>
         </DialogHeader>
         
@@ -130,6 +165,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                           </li>
                         ))}
                       </ul>
+                       <p className="text-xs text-muted-foreground mt-1">Attachment URL Length (example first attachment): {complaint.attachments[0]?.url?.length}</p>
                     </div>
                   )}
                 </CardContent>
@@ -137,9 +173,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Internal Notes History</CardTitle></CardHeader>
-                  <CardContent className="space-y-2 text-xs"> {/* Removed max-h and overflow from here */}
+                  <CardContent className="space-y-2 text-xs p-4"> {/* Removed max-h for full display */}
                     {complaint.internalNotes.slice().reverse().map(note => (
-                      <div key={note.id} className="p-2 bg-secondary rounded">
+                      <div key={note.id || `note-${note.timestamp.getTime()}`} className="p-2 bg-secondary rounded">
                         <p className="font-semibold">{note.userName} <span className="font-normal text-muted-foreground">({format(new Date(note.timestamp), "PP p")})</span>:</p>
                         <p className="whitespace-pre-wrap">{note.text}</p>
                       </div>
@@ -164,11 +200,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {complaint.status && !engineerAllowedStatuses.includes(complaint.status) && !isTerminalStatusForEngineer && (
+                        {/* Show current status if it's one engineers cannot normally set, but it's already set */}
+                        {complaint.status && !engineerAllowedStatuses.includes(complaint.status) && (
                              <SelectItem value={complaint.status} disabled>{complaint.status} (Current)</SelectItem>
-                        )}
-                        {isTerminalStatusForEngineer && complaint.status && (
-                            <SelectItem value={complaint.status} disabled>{complaint.status} (Current - Locked)</SelectItem>
                         )}
                         {engineerAllowedStatuses.map(s => <SelectItem key={s} value={s} disabled={isTerminalStatusForEngineer && s !== complaint.status}>{s}</SelectItem>)}
                       </SelectContent>
@@ -200,6 +234,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                       value={internalNote}
                       onChange={(e) => setInternalNote(e.target.value)}
                       rows={3}
+                      // Engineers can always add internal notes, unless complaint is fully closed by admin maybe
                     />
                   </div>
                 </CardContent>
@@ -209,8 +244,10 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
         </div>
         
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={isTerminalStatusForEngineer}>Save Changes</Button>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+          <Button onClick={handleSave} disabled={isTerminalStatusForEngineer || isSubmitting}>
+            {isSubmitting ? "Saving..." : "Save Changes"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

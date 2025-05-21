@@ -23,28 +23,28 @@ export enum ComplaintStatus {
   Unresolved = 'Unresolved',
   Closed = 'Closed',
   Escalated = 'Escalated',
-  Reopened = 'Reopened', // Added Reopened status
+  Reopened = 'Reopened',
 }
 
 export interface ComplaintAttachment {
-  id: string;
+  id: string; // Will be MongoDB _id string for subdocument
   fileName: string;
   fileType: string;
-  url: string; // URL to the uploaded file
+  url: string; // Data URI or future file storage URL
 }
 
 export interface ComplaintNote {
-  id: string;
-  userId: string; // ID of the staff member who added the note
+  id: string; // Will be MongoDB _id string for subdocument
+  userId: string; // User ID (MongoDB _id string) of the staff member
   userName: string;
   timestamp: Date;
   text: string;
-  isInternal: boolean; // True for staff-only notes
+  isInternal: boolean;
 }
 
 export interface Complaint {
-  id: string;
-  customerId: string;
+  id: string; // Will be MongoDB _id string
+  customerId: string; // User ID (MongoDB _id string)
   customerName: string;
   category: ComplaintCategory;
   description: string;
@@ -53,15 +53,15 @@ export interface Complaint {
   updatedAt: Date;
   status: ComplaintStatus;
   priority?: ComplaintPriority;
-  assignedTo?: string; // Engineer's User ID
+  assignedTo?: string; // Engineer's User ID (MongoDB _id string)
   assignedToName?: string;
-  currentHandlerLevel?: EngineerLevel; // Level of the currently assigned engineer
-  resolutionTimeline?: Date; // Expected resolution date
+  currentHandlerLevel?: EngineerLevel;
+  resolutionTimeline?: Date;
   resolvedAt?: Date;
   resolutionDetails?: string;
   internalNotes?: ComplaintNote[];
   customerFeedback?: {
-    rating: number; // e.g., 1-5 stars
+    rating: number;
     comment?: string;
   };
 }

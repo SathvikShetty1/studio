@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@/types';
-import { getAllMockUsers, addMockUser, updateMockUser, deleteMockUser } from '@/lib/mock-data';
+// Removed mock-data imports
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,26 +19,45 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from '@/hooks/use-auth';
-// TODO: Create a UserFormModal for adding/editing users
+import { useToast } from '@/hooks/use-toast';
+// TODO: Create a UserFormModal for adding/editing users, which will call API endpoints
 
 export default function ManageUsersPage() {
-  const { user: adminUser } = useAuth();
+  const { user: adminUser, isLoading: authIsLoading } = useAuth();
+  const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+
+  const fetchAllUsersAPI = useCallback(async () => {
+    console.log("[ManageUsersPage] fetchAllUsersAPI called.");
+    setIsLoadingUsers(true);
+    try {
+      const response = await fetch('/api/users');
+      if (response.ok) {
+        const usersData: User[] = await response.json();
+        console.log("[ManageUsersPage] fetchAllUsersAPI: Successfully fetched users:", usersData.length);
+        setUsers(usersData);
+      } else {
+        const errorData = await response.json();
+        console.error("[ManageUsersPage] fetchAllUsersAPI: Failed to fetch users -", response.status, errorData.message);
+        toast({ title: "Error", description: `Could not fetch users: ${errorData.message || 'Server error'}`, variant: "destructive" });
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error("[ManageUsersPage] fetchAllUsersAPI: Network or other error:", error);
+      toast({ title: "Error", description: "A network error occurred while fetching users.", variant: "destructive" });
+      setUsers([]);
+    } finally {
+      setIsLoadingUsers(false);
+      console.log("[ManageUsersPage] fetchAllUsersAPI finished.");
+    }
+  }, [toast]);
 
   useEffect(() => {
-    const loadUsers = () => {
-      const allUsers = getAllMockUsers();
-      setUsers(allUsers);
-      setIsLoading(false);
-    };
-    loadUsers();
-  }, []);
-
-
-  if (!adminUser || adminUser.role !== 'admin') {
-    return <p className="p-4">Access Denied. You must be an admin to view this page.</p>;
-  }
+    if (!authIsLoading && adminUser && adminUser.role === 'admin') {
+      fetchAllUsersAPI();
+    }
+  }, [adminUser, authIsLoading, fetchAllUsersAPI]);
   
   const getInitials = (name: string) => {
     if (!name) return '';
@@ -47,19 +66,42 @@ export default function ManageUsersPage() {
     return (names[0][0] + (names.length > 1 ? names[names.length - 1][0] : '')).toUpperCase();
   };
 
-  // Placeholder functions for future modal integration
-  const handleAddUser = () => console.log("Add new user clicked");
-  const handleEditUser = (userId: string) => console.log("Edit user:", userId);
-  const handleDeleteUser = (userId: string) => {
-    deleteMockUser(userId);
-    setUsers(getAllMockUsers()); // Refresh list
-    console.log("Delete user:", userId);
+  // Placeholder functions for future modal integration that will call API
+  const handleAddUser = () => {
+    console.log("Add new user clicked - requires modal and API call");
+    toast({title: "Feature Coming Soon", description: "Adding users via UI is not yet implemented."});
+    // TODO: Implement UserFormModal and POST to /api/users/register (or a dedicated admin create user endpoint)
+  };
+  const handleEditUser = (userId: string) => {
+    console.log("Edit user:", userId, "- requires modal and API call");
+    toast({title: "Feature Coming Soon", description: `Editing user ${userId.slice(-4)} via UI is not yet implemented.`});
+    // TODO: Implement UserFormModal and PUT to /api/users/[userId]
+  };
+  
+  const handleDeleteUser = async (userId: string) => {
+    console.log("Attempting to delete user:", userId);
+    // Optimistic UI update can be added here if desired
+    try {
+        const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        if (response.ok) {
+            toast({ title: "User Deleted", description: `User ${userId.slice(-4)} has been removed.` });
+            await fetchAllUsersAPI(); // Refresh list
+        } else {
+            const errorData = await response.json();
+            toast({ title: "Deletion Failed", description: errorData.message || `Could not delete user ${userId.slice(-4)}.`, variant: "destructive"});
+        }
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        toast({ title: "Error", description: "An unexpected error occurred during deletion.", variant: "destructive"});
+    }
   };
 
-  if (isLoading) {
+  if (authIsLoading || isLoadingUsers) {
     return <p>Loading users...</p>;
   }
-
+  if (!adminUser || adminUser.role !== 'admin') {
+    return <p className="p-4">Access Denied. You must be an admin to view this page.</p>;
+  }
 
   return (
     <div className="space-y-6">
@@ -94,7 +136,7 @@ export default function ManageUsersPage() {
                 <TableRow key={user.id}>
                   <TableCell>
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="user avatar" />
+                      <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="user avatar"/>
                       <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                     </Avatar>
                   </TableCell>

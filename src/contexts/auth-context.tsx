@@ -3,17 +3,19 @@
 
 import type { User } from '@/types';
 import { UserRole } from '@/types';
-import { getAllMockUsers } from '@/lib/mock-data'; // Changed import
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 interface AuthContextType {
   user: User | null;
-  role: UserRole | null;
-  login: (email: string, password?: string, roleOverride?: UserRole) => boolean; 
+  role: UserRole | null; // Kept for convenience, derived from user
+  login: (email: string, password?: string) => Promise<boolean>; 
   logout: () => void;
   isLoading: boolean;
+  fetchUserDetails: (userId: string) => Promise<User | null>; // Added for fetching user details
 }
+
+const SESSION_STORAGE_KEY = 'complaintCentralUser';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -24,35 +26,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    console.log("[AuthProvider] useEffect triggered to check stored user.");
-    const storedUserId = localStorage.getItem('currentUserId');
-    if (storedUserId) {
-      console.log("[AuthProvider] Found storedUserId:", storedUserId);
-      const allUsers = getAllMockUsers();
-      const loggedInUser = allUsers.find(u => u.id === storedUserId);
-      if (loggedInUser) {
-        console.log("[AuthProvider] User found from localStorage ID:", loggedInUser);
-        setUser(loggedInUser);
-        setRole(loggedInUser.role);
-      } else {
-        console.warn("[AuthProvider] StoredUserId found, but no matching user in mock data. Clearing localStorage.");
-        localStorage.removeItem('currentUserId'); // Clear invalid stored ID
+  const fetchUserDetails = async (userId: string): Promise<User | null> => {
+    if (!userId) return null;
+    try {
+      const response = await fetch(`/api/users/${userId}`);
+      if (response.ok) {
+        const userData: User = await response.json();
+        return userData;
       }
-    } else {
-      console.log("[AuthProvider] No storedUserId found.");
+      return null;
+    } catch (error) {
+      console.error("Failed to fetch user details", error);
+      return null;
     }
-    setIsLoading(false);
-    console.log("[AuthProvider] Initial loading complete. isLoading set to false.");
+  };
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      console.log("[AuthProvider] useEffect triggered to check stored user session.");
+      setIsLoading(true);
+      const storedUserSession = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (storedUserSession) {
+        try {
+          const sessionUser: User = JSON.parse(storedUserSession);
+          // Optionally re-fetch user details for freshness or validation
+          const freshUser = await fetchUserDetails(sessionUser.id);
+          if (freshUser) {
+            console.log("[AuthProvider] User found from sessionStorage:", freshUser);
+            setUser(freshUser);
+            setRole(freshUser.role);
+          } else {
+             console.warn("[AuthProvider] Stored session user ID not found in DB or fetch failed. Clearing session.");
+            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+          }
+        } catch (e) {
+          console.error("[AuthProvider] Error parsing stored user session. Clearing.", e);
+          sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        }
+      } else {
+        console.log("[AuthProvider] No stored user session found.");
+      }
+      setIsLoading(false);
+      console.log("[AuthProvider] Initial loading complete. isLoading set to false.");
+    };
+    initializeAuth();
   }, []);
 
   useEffect(() => {
     if (!isLoading) {
       console.log("[AuthProvider] Routing check. User:", user ? user.id : 'null', "Pathname:", pathname);
-      if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/register') && pathname !== '/') {
-        console.log("[AuthProvider] No user, not on auth pages or landing. Redirecting to /login.");
+      const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register');
+      const isLandingPage = pathname === '/';
+
+      if (!user && !isAuthPage && !isLandingPage) {
+        console.log("[AuthProvider] No user, not on auth/landing. Redirecting to /login.");
         router.push('/login');
-      } else if (user && (pathname.startsWith('/login') || pathname.startsWith('/register'))) {
+      } else if (user && isAuthPage) {
         console.log("[AuthProvider] User logged in, but on auth page. Redirecting to dashboard.");
         redirectToDashboard(user.role);
       }
@@ -74,46 +103,63 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = (email: string, password?: string, roleOverride?: UserRole): boolean => {
-    console.log(`[AuthProvider] Login attempt for email: ${email}, roleOverride: ${roleOverride}`);
-    const allUsers = getAllMockUsers(); // Use function to get users
-    const foundUser = allUsers.find(u => u.email === email);
-
-    if (foundUser) {
-      // In a real app with passwords, you'd verify the password here.
-      // For this localStorage version, we're skipping password check.
-      const userToLogin = { ...foundUser };
-      if (roleOverride) { // This roleOverride is mainly for easier initial testing without full registration
-        userToLogin.role = roleOverride;
-      }
-      
-      console.log("[AuthProvider] User found for login:", userToLogin);
-      setUser(userToLogin);
-      setRole(userToLogin.role);
-      localStorage.setItem('currentUserId', userToLogin.id);
-      console.log("[AuthProvider] Stored currentUserId:", userToLogin.id);
-      redirectToDashboard(userToLogin.role);
-      return true;
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    if (!password) { // Basic check, password should always be provided for this flow
+        console.warn("[AuthProvider] Login attempt without password.");
+        return false;
     }
-    console.warn("[AuthProvider] Login failed: User not found with email:", email);
-    return false;
+    console.log(`[AuthProvider] Login attempt for email: ${email}`);
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const { user: loggedInUser } = await response.json() as { user: User };
+        console.log("[AuthProvider] User logged in via API:", loggedInUser);
+        setUser(loggedInUser);
+        setRole(loggedInUser.role);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(loggedInUser));
+        redirectToDashboard(loggedInUser.role);
+        setIsLoading(false);
+        return true;
+      } else {
+        const errorData = await response.json();
+        console.warn("[AuthProvider] Login failed via API:", errorData.message || response.statusText);
+        setUser(null);
+        setRole(null);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        setIsLoading(false);
+        return false;
+      }
+    } catch (error) {
+      console.error("[AuthProvider] Network or other error during login:", error);
+      setUser(null);
+      setRole(null);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      setIsLoading(false);
+      return false;
+    }
   };
 
   const logout = () => {
     console.log("[AuthProvider] Logout called.");
     setUser(null);
     setRole(null);
-    localStorage.removeItem('currentUserId');
-    console.log("[AuthProvider] Cleared currentUserId from localStorage.");
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    console.log("[AuthProvider] Cleared user session from sessionStorage.");
     router.push('/login');
   };
 
-  if (isLoading) {
+  if (isLoading && !user) { // Show loading only if not already showing user content
     return <div className="flex items-center justify-center h-screen"><p>Loading application...</p></div>;
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, role, login, logout, isLoading, fetchUserDetails }}>
       {children}
     </AuthContext.Provider>
   );

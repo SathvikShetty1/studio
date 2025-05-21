@@ -1,3 +1,4 @@
+
 export enum UserRole {
   Customer = 'customer',
   Admin = 'admin',
@@ -11,10 +12,11 @@ export enum EngineerLevel {
 }
 
 export interface User {
-  id: string;
+  id: string; // Will be MongoDB _id string
   name: string;
   email: string;
   role: UserRole;
   avatar?: string; // URL to avatar image
   engineerLevel?: EngineerLevel;
+  // passwordHash should not be part of the frontend User type
 }

@@ -26,7 +26,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { UploadCloud } from "lucide-react";
-import type { ComplaintAttachment } from '@/types';
+import type { ComplaintAttachment } from '@/types'; // Using full ComplaintAttachment type
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth'; // For adding note with current user's name
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain"];
@@ -40,7 +42,7 @@ const formSchema = z.object({
     .optional()
     .refine(
       (files) => !files || Array.from(files).every((file) => file.size <= MAX_FILE_SIZE),
-      `Max file size is 5MB.`
+      `Max file size is 5MB per file.`
     )
     .refine(
       (files) => !files || Array.from(files).every((file) => ALLOWED_FILE_TYPES.includes(file.type)),
@@ -48,18 +50,23 @@ const formSchema = z.object({
     ),
 });
 
-// Helper function to read file as Data URL
 const readFileAsDataURL = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
+         console.log(`[readFileAsDataURL] FileReader result (first 100 chars): ${reader.result.substring(0, 100)}`);
+         console.log(`[readFileAsDataURL] FileReader result length: ${reader.result.length}`);
         resolve(reader.result);
       } else {
+        console.error('[readFileAsDataURL] FileReader result was not a string.');
         reject(new Error('FileReader did not return a string.'));
       }
     };
-    reader.onerror = (error) => reject(error);
+    reader.onerror = (error) => {
+      console.error('[readFileAsDataURL] FileReader error:', error);
+      reject(error);
+    };
     reader.readAsDataURL(file);
   });
 };
@@ -68,11 +75,15 @@ interface RequestReopenModalProps {
   complaintId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmitReopen: (complaintId: string, reason: string, newAttachments: ComplaintAttachment[]) => void;
+  // onSubmitReopen will now be an async function that directly calls the API
+  onReopenSuccess: (updatedComplaint: any) => void; // Callback after successful API update
 }
 
-export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReopen }: RequestReopenModalProps) {
+export function RequestReopenModal({ complaintId, isOpen, onClose, onReopenSuccess }: RequestReopenModalProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [fileNames, setFileNames] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -84,7 +95,7 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      form.setValue("attachments", files); // Set the FileList object for react-hook-form
+      form.setValue("attachments", files);
       setFileNames(Array.from(files).map(file => file.name));
     } else {
       form.setValue("attachments", undefined);
@@ -93,36 +104,69 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!complaintId) return;
+    if (!complaintId || !user) {
+      toast({ title: "Error", description: "Complaint ID or user not found.", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
 
-    const newAttachments: ComplaintAttachment[] = [];
+    const newAttachmentsData: Omit<ComplaintAttachment, 'id'>[] = [];
     if (values.attachments && values.attachments.length > 0) {
       for (const file of Array.from(values.attachments)) {
          try {
           const dataUrl = await readFileAsDataURL(file);
-          console.log(`[RequestReopenModal] Processed file ${file.name}, dataUrl starts with: ${dataUrl.substring(0,30)}`);
-          newAttachments.push({
-            id: `attach-reopen-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          console.log(`[RequestReopenModal] Processed file ${file.name}, Data URI Length: ${dataUrl?.length}`);
+          newAttachmentsData.push({
             fileName: file.name,
             fileType: file.type,
             url: dataUrl, 
           });
         } catch (error) {
           console.error("Error reading file for reopen:", file.name, error);
+          toast({ title: "File Error", description: `Could not process file: ${file.name}`, variant: "destructive" });
         }
       }
     }
-    onSubmitReopen(complaintId, values.reason, newAttachments);
-    form.reset();
-    setFileNames([]);
-    onClose();
+
+    const reopenPayload = {
+      status: "Reopened", // Directly set status
+      reopenReason: values.reason, // Send reason to API
+      newAttachments: newAttachmentsData, // Send attachments to API
+      requestingUserId: user.id,
+      requestingUserName: user.name,
+    };
+
+    try {
+      const response = await fetch(`/api/complaints/${complaintId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reopenPayload),
+      });
+
+      if (response.ok) {
+        const updatedComplaint = await response.json();
+        toast({ title: "Reopen Requested", description: `Complaint #${complaintId.slice(-6)} has been flagged for reopening.` });
+        onReopenSuccess(updatedComplaint); // Callback for parent to update its state
+        form.reset();
+        setFileNames([]);
+        onClose();
+      } else {
+        const errorData = await response.json();
+        toast({ title: "Reopen Failed", description: errorData.message || "Could not request reopen.", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Error submitting reopen request via API:", error);
+      toast({ title: "Network Error", description: "Failed to connect to the server.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!isOpen || !complaintId) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
+    <Dialog open={isOpen} onOpenChange={(openState) => {
+      if (!openState) {
         form.reset();
         setFileNames([]);
         onClose();
@@ -189,7 +233,8 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
                     </div>
                   </FormControl>
                   <FormDescription>
-                    You can upload multiple files.
+                    You can upload multiple files. Attachments will be added to the existing ones.
+                    IMPORTANT: For production apps, consider dedicated file storage.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -200,8 +245,10 @@ export function RequestReopenModal({ complaintId, isOpen, onClose, onSubmitReope
                 form.reset();
                 setFileNames([]);
                 onClose();
-              }}>Cancel</Button>
-              <Button type="submit">Submit Reopen Request</Button>
+              }} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Submit Reopen Request"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

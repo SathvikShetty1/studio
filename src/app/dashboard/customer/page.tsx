@@ -4,9 +4,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SubmitComplaintForm } from '@/components/complaints/submit-complaint-form';
 import { ComplaintCard } from '@/components/complaints/complaint-card';
-import type { Complaint, ComplaintNote, ComplaintAttachment } from '@/types';
+import type { Complaint } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
-import { getAllMockComplaints, addComplaintToMock, updateMockComplaint } from '@/lib/mock-data';
 import { PlusCircle, ListFilter, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -22,99 +21,92 @@ import { ComplaintStatus } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { RequestReopenModal } from '@/components/complaints/request-reopen-modal';
 
-
 export default function CustomerDashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authIsLoading, fetchUserDetails } = useAuth();
   const { toast } = useToast();
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus[]>([]);
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [reopeningComplaintId, setReopeningComplaintId] = useState<string | null>(null);
 
-  const fetchMyComplaints = useCallback(() => {
-    console.log("[CustomerDashboardPage] fetchMyComplaints called.");
-    if (user && user.id) {
-      console.log("[CustomerDashboardPage] User found with ID:", user.id);
-      setIsLoadingComplaints(true);
-      const allComplaints = getAllMockComplaints();
-      console.log("[CustomerDashboardPage] Total complaints from getAllMockComplaints:", allComplaints.length, allComplaints.map(c => c.id + ":" + c.customerId));
-      const userComplaints = allComplaints.filter(c => c.customerId === user.id);
-      console.log("[CustomerDashboardPage] Filtered complaints for user:", userComplaints.length, userComplaints);
-      setMyComplaints(userComplaints);
+  const fetchMyComplaintsAPI = useCallback(async (currentUserId?: string) => {
+    const idToFetch = currentUserId || user?.id;
+    if (!idToFetch) {
+      console.log("[CustomerDashboardPage] fetchMyComplaintsAPI: No user ID, cannot fetch.");
+      setMyComplaints([]);
       setIsLoadingComplaints(false);
-    } else {
+      return;
+    }
+
+    console.log("[CustomerDashboardPage] fetchMyComplaintsAPI called for user ID:", idToFetch);
+    setIsLoadingComplaints(true);
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(`/api/complaints?customerId=${idToFetch}&role=customer`);
+      if (response.ok) {
+        const complaintsData: Complaint[] = await response.json();
+        console.log("[CustomerDashboardPage] fetchMyComplaintsAPI: Successfully fetched complaints:", complaintsData.length, complaintsData);
+        setMyComplaints(complaintsData);
+      } else {
+        const errorData = await response.json();
+        console.error("[CustomerDashboardPage] fetchMyComplaintsAPI: Failed to fetch complaints -", response.status, errorData.message);
+        toast({ title: "Error", description: `Could not fetch your complaints: ${errorData.message || 'Server error'}`, variant: "destructive" });
+        setMyComplaints([]);
+      }
+    } catch (error) {
+      console.error("[CustomerDashboardPage] fetchMyComplaintsAPI: Network or other error:", error);
+      toast({ title: "Error", description: "A network error occurred while fetching your complaints.", variant: "destructive" });
+      setMyComplaints([]);
+    } finally {
+      setIsLoadingComplaints(false);
+      setIsRefreshing(false);
+      console.log("[CustomerDashboardPage] fetchMyComplaintsAPI finished.");
+    }
+  }, [user?.id, toast]); // Dependency on user.id and toast
+
+  useEffect(() => {
+    console.log("[CustomerDashboardPage][useEffect for user/authLoading] Triggered. User ID:", user?.id, "AuthLoading:", authIsLoading);
+    if (!authIsLoading && user && user.id) {
+      fetchMyComplaintsAPI(user.id);
+    } else if (!authIsLoading && !user) {
+      console.log("[CustomerDashboardPage][useEffect for user/authLoading] No user, clearing complaints.");
       setMyComplaints([]);
       setIsLoadingComplaints(false);
     }
-    console.log("[CustomerDashboardPage] fetchMyComplaints finished.");
-  }, [user]);
-
-  useEffect(() => {
-    console.log("[CustomerDashboardPage] useEffect for [user] triggered. User:", user?.id);
-    fetchMyComplaints();
-  }, [user, fetchMyComplaints]);
+  }, [user, authIsLoading, fetchMyComplaintsAPI]);
 
   const handleComplaintSubmitted = (newComplaint: Complaint) => {
-    console.log("[CustomerDashboardPage] handleComplaintSubmitted triggered by form on this page for complaint:", newComplaint.id);
-    addComplaintToMock(newComplaint); 
-    fetchMyComplaints(); 
+    console.log("[CustomerDashboardPage] handleComplaintSubmitted triggered by form for complaint:", newComplaint.id);
+    // API call already made by SubmitComplaintForm, just refresh list
+    fetchMyComplaintsAPI(); 
     setShowSubmitForm(false);
-    toast({
-      title: "Complaint Submitted!",
-      description: `Your complaint #${newComplaint.id.slice(-6)} has been successfully submitted.`,
-    });
+    // Toast already shown by SubmitComplaintForm
   };
 
   const openReopenModal = (complaintId: string) => {
     setReopeningComplaintId(complaintId);
     setIsReopenModalOpen(true);
   };
-
-  const handleConfirmReopenRequest = (complaintIdToReopen: string, reason: string, newAttachments: ComplaintAttachment[]) => {
-    const complaintToReopen = myComplaints.find(c => c.id === complaintIdToReopen);
-    if (complaintToReopen && user) {
-      const updatedComplaint: Complaint = {
-        ...complaintToReopen,
-        status: ComplaintStatus.Reopened,
-        updatedAt: new Date(),
-        internalNotes: [
-          ...(complaintToReopen.internalNotes || []),
-          {
-            id: `note-reopenreq-${Date.now()}`,
-            userId: user.id,
-            userName: user.name,
-            text: `Customer requested to reopen: "${reason}"`,
-            timestamp: new Date(),
-            isInternal: false, 
-          } as ComplaintNote,
-        ],
-        attachments: [
-          ...(complaintToReopen.attachments || []),
-          ...newAttachments,
-        ],
-      };
-      updateMockComplaint(complaintIdToReopen, updatedComplaint);
-      fetchMyComplaints(); 
-      toast({
-        title: "Reopen Requested",
-        description: `Complaint #${complaintIdToReopen.slice(-6)} has been flagged for reopening.`,
-      });
-    }
+  
+  const handleReopenSuccess = (updatedComplaint: Complaint) => {
+    console.log("[CustomerDashboardPage] handleReopenSuccess called with updated complaint:", updatedComplaint.id);
+    fetchMyComplaintsAPI(); // Re-fetch all complaints to update the list
     setIsReopenModalOpen(false);
     setReopeningComplaintId(null);
+    // Toast already shown by RequestReopenModal
   };
   
   const filteredComplaints = myComplaints.filter(complaint => 
     statusFilter.length === 0 || statusFilter.includes(complaint.status)
   ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-
-  if (!user) return <div className="flex items-center justify-center h-screen"><p>Loading user data or please login.</p></div>;
-  if (isLoadingComplaints && !user) return <div className="flex items-center justify-center h-screen"><p>Loading complaints...</p></div>;
-
+  if (authIsLoading) return <div className="flex items-center justify-center h-screen"><p>Loading user data...</p></div>;
+  if (!user && !authIsLoading) return <div className="p-4">Please login to view your dashboard.</div>;
+  // isLoadingComplaints is handled within the main return block for better UX
 
   return (
     <div className="space-y-6">
@@ -123,7 +115,7 @@ export default function CustomerDashboardPage() {
           <h1 className="text-2xl font-semibold">My Complaints Dashboard</h1>
           <p className="text-muted-foreground">View your submitted complaints and their status, or file a new one.</p>
         </div>
-        <Button onClick={() => setShowSubmitForm(prev => !prev)}>
+        <Button onClick={() => setShowSubmitForm(prev => !prev)} disabled={isRefreshing}>
           <PlusCircle className="mr-2 h-4 w-4" />
           {showSubmitForm ? 'Cancel Submission' : 'File New Complaint'}
         </Button>
@@ -140,10 +132,10 @@ export default function CustomerDashboardPage() {
       )}
       
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">My Complaint History ({filteredComplaints.length})</h2>
+        <h2 className="text-xl font-semibold">My Complaint History ({isRefreshing ? "..." : filteredComplaints.length})</h2>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline">
+            <Button variant="outline" disabled={isRefreshing}>
               <ListFilter className="mr-2 h-4 w-4" /> Filter by Status
             </Button>
           </DropdownMenuTrigger>
@@ -178,13 +170,15 @@ export default function CustomerDashboardPage() {
         </DropdownMenu>
       </div>
 
-      {filteredComplaints.length > 0 ? (
+      {isLoadingComplaints && !isRefreshing ? (
+         <div className="text-center py-10"><p>Loading complaints...</p></div>
+      ): filteredComplaints.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredComplaints.map(complaint => (
             <ComplaintCard 
               key={complaint.id} 
               complaint={complaint} 
-              onOpenReopenModal={openReopenModal}
+              onOpenReopenModal={openReopenModal} // This now just opens the modal
               userRole="customer"
             />
           ))}
@@ -200,7 +194,6 @@ export default function CustomerDashboardPage() {
               Ready to submit your first complaint? Click the button above.
             </p>
           )}
-           {isLoadingComplaints && <p>Checking for complaints...</p>}
         </div>
       )}
       <RequestReopenModal
@@ -209,7 +202,7 @@ export default function CustomerDashboardPage() {
             setIsReopenModalOpen(false);
             setReopeningComplaintId(null);
         }}
-        onSubmitReopen={handleConfirmReopenRequest}
+        onReopenSuccess={handleReopenSuccess}
         complaintId={reopeningComplaintId}
       />
     </div>

@@ -2,9 +2,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Complaint, User, ComplaintCategory, ComplaintNote } from '@/types';
+import type { Complaint, User as UserTypeFE } from '@/types'; // Renamed User to UserTypeFE to avoid conflict with Mongoose Model
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum, EngineerLevel, UserRole } from '@/types';
-import { getAllMockUsers, updateMockComplaint } from '@/lib/mock-data';
+// Removed mock-data imports
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-// ScrollArea is removed for old-school CSS scroll
+// ScrollArea component removed for direct CSS scrolling
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Paperclip, AlertTriangle } from 'lucide-react';
@@ -30,7 +30,7 @@ interface ComplaintDetailsModalAdminProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => void;
+  onUpdateComplaint: (updatedComplaint: Complaint) => void; // Callback after successful API update
 }
 
 const UNASSIGNED_VALUE = "_UNASSIGNED_";
@@ -43,13 +43,36 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | undefined>(complaint?.assignedTo || UNASSIGNED_VALUE);
   const [internalNote, setInternalNote] = useState('');
   const [resolutionTimeline, setResolutionTimeline] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { toast } = useToast();
 
-  const allUsers = useMemo(() => getAllMockUsers(), []);
+  const [allUsers, setAllUsers] = useState<UserTypeFE[]>([]); // Store all users fetched from API
   const allEngineers = useMemo(() => allUsers.filter(u => u.role === UserRole.Engineer), [allUsers]);
-  const [engineersForAssignment, setEngineersForAssignment] = useState<User[]>(allEngineers);
+  const [engineersForAssignment, setEngineersForAssignment] = useState<UserTypeFE[]>([]);
   const [availableStatuses, setAvailableStatuses] = useState<ComplaintStatus[]>(Object.values(ComplaintStatus));
+
+  useEffect(() => {
+    // Fetch all users once when modal might open or users list is needed
+    const fetchAllSystemUsers = async () => {
+        try {
+            const response = await fetch('/api/users');
+            if(response.ok) {
+                const usersData: UserTypeFE[] = await response.json();
+                setAllUsers(usersData);
+            } else {
+                toast({title: "Error", description: "Failed to load user list for assignment.", variant: "destructive"});
+            }
+        } catch (error) {
+            toast({title: "Error", description: "Network error loading user list.", variant: "destructive"});
+            console.error("Failed to fetch system users for modal:", error);
+        }
+    };
+    if (isOpen) { // Fetch users if modal is open and users not loaded
+        fetchAllSystemUsers();
+    }
+  }, [isOpen, toast]);
+
 
   useEffect(() => {
     if (complaint) {
@@ -59,7 +82,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       setResolutionTimeline(complaint.resolutionTimeline ? format(new Date(complaint.resolutionTimeline), "yyyy-MM-dd") : '');
       setInternalNote('');
 
-      let displayEngineers = [...allEngineers];
+      let displayEngineers = [...allEngineers]; // Use state `allEngineers` which is populated from API
       if ((complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo) {
         const currentAssignee = allUsers.find(u => u.id === complaint.assignedTo);
         if (currentAssignee && currentAssignee.role === UserRole.Engineer && currentAssignee.engineerLevel) {
@@ -69,22 +92,17 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               eng.engineerLevel && engineerLevelOrder.indexOf(eng.engineerLevel) > currentLevelIndex
             );
           } else {
-            // If current assignee is already Executive, allow re-assigning to other Executives only
              displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive && eng.id !== currentAssignee.id);
-             if (displayEngineers.length === 0) { // If no other execs, show current exec (effectively no change)
+             if (displayEngineers.length === 0) { 
                  displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive);
              }
           }
         }
       } else if (complaint.status === ComplaintStatus.Escalated && !complaint.assignedTo) {
-        // If escalated and no one assigned, show Senior or Executive
         displayEngineers = allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Senior || eng.engineerLevel === EngineerLevel.Executive);
-      } else if (complaint.status === ComplaintStatus.PendingAssignment || complaint.status === ComplaintStatus.Reopened || complaint.status === ComplaintStatus.Submitted) {
-        // For these statuses, allow assignment to any engineer
+      } else if ([ComplaintStatus.PendingAssignment, ComplaintStatus.Reopened, ComplaintStatus.Submitted].includes(complaint.status)) {
         displayEngineers = allEngineers;
       }
-
-
       setEngineersForAssignment(displayEngineers.length > 0 ? displayEngineers : allEngineers);
       
       let statuses: ComplaintStatus[] = Object.values(ComplaintStatus);
@@ -102,29 +120,27 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
          statuses = [ComplaintStatus.Unresolved, ComplaintStatus.Escalated, ComplaintStatus.PendingAssignment, ComplaintStatus.Assigned];
       }
       setAvailableStatuses(statuses);
-
     } else {
       setEngineersForAssignment(allEngineers);
       setAvailableStatuses(Object.values(ComplaintStatus));
     }
-  }, [complaint, allEngineers, allUsers]);
+  }, [complaint, allEngineers, allUsers]); // allUsers dependency added
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!adminUser || !complaint) {
-      toast({ title: "Error", description: "Admin user or complaint not found. Cannot save changes.", variant: "destructive" });
+      toast({ title: "Error", description: "Admin user or complaint not found. Cannot save.", variant: "destructive" });
       return;
     }
+    setIsSubmitting(true);
     
     const finalSelectedEngineerId = selectedEngineerId === UNASSIGNED_VALUE ? undefined : selectedEngineerId;
     const assignedEngineerDetails = finalSelectedEngineerId ? allUsers.find(e => e.id === finalSelectedEngineerId) : undefined;
-    console.log("[AdminModal][handleSave] Attempting to save. Assigned Engineer ID:", finalSelectedEngineerId, "Engineer found:", assignedEngineerDetails?.name);
-
 
     let newStatus = currentStatus || complaint.status;
     let newPriority = selectedPriority || complaint.priority;
     let newResolutionDetails = complaint.resolutionDetails;
     let newResolvedAt = complaint.resolvedAt;
-    let newNotes = complaint.internalNotes || [];
+    let newNotes = complaint.internalNotes ? [...complaint.internalNotes] : []; // Ensure array
     let newCurrentHandlerLevel = assignedEngineerDetails?.engineerLevel || complaint.currentHandlerLevel;
 
     if (finalSelectedEngineerId && 
@@ -136,7 +152,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       newStatus = ComplaintStatus.Assigned;
     } else if (!finalSelectedEngineerId && newStatus === ComplaintStatus.Assigned) {
       newStatus = ComplaintStatus.PendingAssignment;
-      newCurrentHandlerLevel = undefined; // No handler if unassigned
+      newCurrentHandlerLevel = undefined; 
     }
     
     if (currentStatus === ComplaintStatus.Reopened && complaint.status !== ComplaintStatus.Reopened) {
@@ -144,19 +160,16 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       newResolutionDetails = undefined; 
       newResolvedAt = undefined; 
       newNotes.push({
-        id: `note-adminreopen-${Date.now()}`,
-        userId: adminUser.id,
+        // id will be auto-generated by DB for subdocument
+        id: `note-frontend-${Date.now()}`, // temp frontend id
+        userId: adminUser.id, // This is MongoDB _id string
         userName: adminUser.name,
         text: `Complaint reopened by admin. Original status: ${complaint.status}.`,
         timestamp: new Date(),
         isInternal: false, 
       });
-      if (!finalSelectedEngineerId) {
-        newStatus = ComplaintStatus.PendingAssignment;
-        newCurrentHandlerLevel = undefined;
-      } else {
-        newStatus = ComplaintStatus.Assigned; // Ensure it's assigned if an engineer is selected during reopen
-      }
+      if (!finalSelectedEngineerId) newStatus = ComplaintStatus.PendingAssignment;
+      else newStatus = ComplaintStatus.Assigned;
     }
 
     if (currentStatus === ComplaintStatus.Closed && complaint.status !== ComplaintStatus.Closed) {
@@ -164,7 +177,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         newResolvedAt = new Date(); 
       }
       newNotes.push({
-        id: `note-adminclose-${Date.now()}`,
+        id: `note-frontend-${Date.now()}`,
         userId: adminUser.id,
         userName: adminUser.name,
         text: `Complaint closed by admin. Previous status: ${complaint.status}.`,
@@ -173,46 +186,69 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
       });
     }
     
-    const updatedComplaintData: Complaint = {
-      ...complaint,
+    if (internalNote.trim()) {
+        newNotes.push({
+            id: `note-frontend-${Date.now()}`,
+            userId: adminUser.id,
+            userName: adminUser.name,
+            text: internalNote,
+            timestamp: new Date(),
+            isInternal: true,
+        });
+    }
+    
+    const updatePayload = {
       priority: newPriority,
-      assignedTo: finalSelectedEngineerId,
+      assignedTo: finalSelectedEngineerId, // This is MongoDB _id string
       assignedToName: assignedEngineerDetails?.name,
       currentHandlerLevel: newCurrentHandlerLevel,
       status: newStatus,
-      resolutionTimeline: resolutionTimeline ? new Date(resolutionTimeline) : undefined,
-      resolvedAt: newResolvedAt,
+      resolutionTimeline: resolutionTimeline ? new Date(resolutionTimeline).toISOString() : undefined,
+      resolvedAt: newResolvedAt ? new Date(newResolvedAt).toISOString() : undefined,
       resolutionDetails: newResolutionDetails,
-      updatedAt: new Date(),
-      internalNotes: internalNote
-        ? [
-            ...newNotes,
-            {
-              id: `note-${Date.now()}`,
-              userId: adminUser.id,
-              userName: adminUser.name,
-              text: internalNote,
-              timestamp: new Date(),
-              isInternal: true
-            },
-          ]
-        : newNotes,
+      internalNotes: newNotes.map(note => ({ // map to exclude frontend 'id' if not needed by backend for subdoc updates
+          userId: note.userId,
+          userName: note.userName,
+          text: note.text,
+          timestamp: note.timestamp,
+          isInternal: note.isInternal,
+      })),
+      // updatedAt will be handled by server/DB
     };
-    
-    updateMockComplaint(complaint.id, updatedComplaintData); 
-    onUpdateComplaint(updatedComplaintData); 
-    toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
-    onClose();
+
+    try {
+        const response = await fetch(`/api/complaints/${complaint.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload),
+        });
+        if (response.ok) {
+            const updatedComplaintData = await response.json();
+            onUpdateComplaint(updatedComplaintData); 
+            toast({ title: "Complaint Updated", description: `Complaint #${complaint.id.slice(-6)} has been updated.` });
+            onClose();
+        } else {
+            const errorData = await response.json();
+            toast({ title: "Update Failed", description: errorData.message || "Could not update complaint.", variant: "destructive" });
+        }
+    } catch (error) {
+        console.error("Error updating complaint:", error);
+        toast({ title: "Network Error", description: "Failed to connect to server.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
-  const handleEscalateAction = () => {
+  const handleEscalateAction = async () => {
     if (!complaint || !adminUser) return;
+    setIsSubmitting(true);
 
     const isAlreadyMaxLevel = complaint.currentHandlerLevel === EngineerLevel.Executive;
     const isUnresolvedByMaxLevel = complaint.status === ComplaintStatus.Unresolved && isAlreadyMaxLevel;
 
     if (isUnresolvedByMaxLevel) {
       toast({ title: "Escalation Blocked", description: "Cannot escalate further. Complaint unresolved by Executive Engineer.", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
     
@@ -223,25 +259,28 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
             nextLevel = engineerLevelOrder[currentLevelIndex + 1];
         } else {
              toast({ title: "Max Level", description: "Complaint is already at Executive level. Marking as 'Escalated'.", variant: "default" });
-            setCurrentStatus(ComplaintStatus.Escalated);
-            setSelectedPriority(ComplaintPriorityEnum.Escalated);
-            setEngineersForAssignment(allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive));
-            return;
+             // No API call needed if just updating local state before full save
+             setCurrentStatus(ComplaintStatus.Escalated);
+             setSelectedPriority(ComplaintPriorityEnum.Escalated);
+             setEngineersForAssignment(allEngineers.filter(eng => eng.engineerLevel === EngineerLevel.Executive));
+             setIsSubmitting(false); // Allow save button to be used for this change
+             return; // Don't make separate API call for this scenario immediately
         }
     } else {
-      nextLevel = EngineerLevel.Junior;
+      nextLevel = EngineerLevel.Junior; // Default escalation level if none assigned
     }
 
-
-    const escalatedComplaint: Complaint = {
-      ...complaint,
+    const escalatePayload = {
       status: ComplaintStatus.Escalated,
       priority: ComplaintPriorityEnum.Escalated, 
-      updatedAt: new Date(),
+      assignedTo: undefined, // Unassign for re-assignment
+      assignedToName: undefined,
+      currentHandlerLevel: undefined, // Will be set upon new assignment
       internalNotes: [
-        ...(complaint.internalNotes || []),
+        ...(complaint.internalNotes || []).map(note => ({
+            userId: note.userId, userName: note.userName, text: note.text, timestamp: note.timestamp, isInternal: note.isInternal
+        })),
         {
-          id: `note-escalate-${Date.now()}`,
           userId: adminUser.id,
           userName: adminUser.name,
           text: `Complaint escalated by admin. ${nextLevel ? `Targeting ${nextLevel} level or higher.` : 'Marked as escalated.'} Original status: ${complaint.status}.`,
@@ -249,27 +288,43 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           isInternal: true
         },
       ],
-      assignedTo: undefined, 
-      assignedToName: undefined,
-      currentHandlerLevel: undefined, 
     };
-    updateMockComplaint(complaint.id, escalatedComplaint);
-    onUpdateComplaint(escalatedComplaint);
-    setCurrentStatus(ComplaintStatus.Escalated); 
-    setSelectedPriority(ComplaintPriorityEnum.Escalated);
-    setSelectedEngineerId(UNASSIGNED_VALUE);
-    setEngineersForAssignment(allEngineers.filter(eng => 
-        eng.engineerLevel && nextLevel && engineerLevelOrder.indexOf(eng.engineerLevel) >= engineerLevelOrder.indexOf(nextLevel)
-    ));
-    toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${ComplaintStatus.Escalated}. Please assign to an appropriate ${nextLevel || ''} engineer.` });
+    
+    try {
+        const response = await fetch(`/api/complaints/${complaint.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(escalatePayload),
+        });
+        if (response.ok) {
+            const updatedComplaintData = await response.json();
+            onUpdateComplaint(updatedComplaintData); // Update parent state
+            // Update local modal state to reflect escalation for assignment
+            setCurrentStatus(ComplaintStatus.Escalated); 
+            setSelectedPriority(ComplaintPriorityEnum.Escalated);
+            setSelectedEngineerId(UNASSIGNED_VALUE);
+            setEngineersForAssignment(allEngineers.filter(eng => 
+                eng.engineerLevel && nextLevel && engineerLevelOrder.indexOf(eng.engineerLevel) >= engineerLevelOrder.indexOf(nextLevel)
+            ));
+            toast({ title: "Complaint Escalated", description: `Complaint #${complaint.id.slice(-6)} is now ${ComplaintStatus.Escalated}. Please assign to an appropriate ${nextLevel || ''} engineer.` });
+            // onClose(); // Optionally close modal or keep open for reassignment
+        } else {
+            const errorData = await response.json();
+            toast({ title: "Escalation Failed", description: errorData.message || "Could not escalate complaint.", variant: "destructive" });
+        }
+    } catch (error) {
+        console.error("Error escalating complaint:", error);
+        toast({ title: "Network Error", description: "Failed to connect to server for escalation.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
   
   const canEscalate = complaint && 
     ![ComplaintStatus.Closed, ComplaintStatus.Resolved].includes(complaint.status) &&
     !(complaint.currentHandlerLevel === EngineerLevel.Executive && complaint.status !== ComplaintStatus.Unresolved);
 
-
-  if (!complaint) return null;
+  if (!isOpen || !complaint) return null; // Keep this check
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -278,14 +333,14 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
           <DialogTitle>Complaint Details: #{complaint.id.slice(-6)}</DialogTitle>
            <DialogDescription className="flex items-center gap-2 pt-1 text-sm">
             <span>Manage complaint status, priority, assignment, and add internal notes.</span>
-            <Badge variant="outline">{complaint.status}</Badge>
+            <Badge variant="outline">{currentStatus || complaint.status}</Badge>
             {complaint.assignedToName && complaint.currentHandlerLevel && (
               <span className="text-xs">(Handler: {complaint.assignedToName} - {complaint.currentHandlerLevel})</span>
             )}
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6"> {/* This div handles scrolling */}
            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
             {/* Left Column */}
             <div className="space-y-4">
@@ -298,10 +353,10 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                   <div className="flex items-center">
                     <strong>Current Priority:</strong>&nbsp;
                     <Badge 
-                        variant={(complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} 
+                        variant={(selectedPriority === ComplaintPriorityEnum.High || selectedPriority === ComplaintPriorityEnum.Escalated) ? "destructive" : "secondary"} 
                         className="ml-1"
                     >
-                      {complaint.priority || "N/A"}
+                      {selectedPriority || complaint.priority || "N/A"}
                     </Badge>
                   </div>
                   <div>
@@ -319,7 +374,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                       <strong>Attachments:</strong>
                       <ul className="list-disc list-inside mt-1 space-y-1">
                         {complaint.attachments.map(att => {
-                          console.log("[AdminModal] Rendering attachment. ID:", att.id, "URL:", att.url); // DEBUG LOG
+                          console.log("[AdminModal] Rendering attachment. ID:", att.id, "URL:", att.url?.substring(0,50) + "...");
                           return (
                             <li key={att.id} className="text-primary hover:underline text-xs">
                               <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
@@ -329,6 +384,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                           );
                         })}
                       </ul>
+                       <p className="text-xs text-muted-foreground mt-1">Attachment URL Length (example first attachment): {complaint.attachments[0]?.url?.length}</p>
                     </div>
                   )}
                 </CardContent>
@@ -369,7 +425,7 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
                       </SelectContent>
                     </Select>
                     {(complaint.status === ComplaintStatus.Unresolved || complaint.status === ComplaintStatus.Escalated) && complaint.assignedTo && engineersForAssignment.length === 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available for current escalation path. Ensure Executive engineers are registered or adjust escalation criteria.</p>
+                        <p className="text-xs text-muted-foreground mt-1">No higher-level engineers available. Ensure Executive engineers are registered.</p>
                     )}
                   </div>
 
@@ -412,9 +468,9 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
               {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Notes History</CardTitle></CardHeader>
-                  <CardContent className="space-y-2 text-xs p-4">
+                  <CardContent className="space-y-2 text-xs p-4"> {/* Removed max-h and overflow */}
                     {complaint.internalNotes.filter(note => note.isInternal || adminUser?.role === UserRole.Admin).slice().reverse().map(note => (
-                      <div key={note.id} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
+                      <div key={note.id || `note-${note.timestamp.getTime()}`} className={`p-2 rounded ${note.isInternal ? 'bg-yellow-50 border border-yellow-200' : 'bg-secondary'}`}>
                         <p className="font-semibold">
                           {note.userName} 
                           {note.isInternal && <Badge variant="outline" className="ml-2 text-xs bg-yellow-100 text-yellow-700 border-yellow-300">Internal</Badge>}
@@ -433,14 +489,16 @@ export function ComplaintDetailsModalAdmin({ complaint, isOpen, onClose, onUpdat
         <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center w-full gap-2">
             {canEscalate && (
-              <Button variant="destructive" onClick={handleEscalateAction} className="w-full sm:w-auto">
+              <Button variant="destructive" onClick={handleEscalateAction} className="w-full sm:w-auto" disabled={isSubmitting}>
                 <AlertTriangle className="mr-2 h-4 w-4" />
-                Escalate Complaint
+                {isSubmitting ? "Escalating..." : "Escalate Complaint"}
               </Button>
             )}
             <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
-              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
-              <Button onClick={handleSave} className="w-full sm:w-auto">Save Changes</Button>
+              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto" disabled={isSubmitting}>Cancel</Button>
+              <Button onClick={handleSave} className="w-full sm:w-auto" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
             </div>
           </div>
         </DialogFooter>

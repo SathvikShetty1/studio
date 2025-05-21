@@ -19,12 +19,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import type { User } from "@/types";
-import { UserRole, EngineerLevel } from "@/types";
+import { UserRole, EngineerLevel } from "@/types"; // Keep UserRole and EngineerLevel
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { addMockUser, getAllMockUsers } from '@/lib/mock-data';
-
+// Removed mock-data imports
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -59,41 +57,47 @@ export function RegisterForm() {
 
   const selectedRole = form.watch("role");
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-    const existingUsers = getAllMockUsers(); // Fetch current users
-    const existingUser = existingUsers.find(u => u.email === values.email);
-    if (existingUser) {
+    try {
+      const response = await fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          role: values.role,
+          engineerLevel: values.role === UserRole.Engineer ? values.engineerLevel : undefined,
+          avatar: `https://picsum.photos/seed/${values.email}/40/40` // Example avatar
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Registration Successful!",
+          description: data.message || `User ${values.name} created. You can now log in.`,
+        });
+        router.push('/login');
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: data.message || "An error occurred during registration.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Registration submission error:", error);
       toast({
-        title: "Registration Failed",
-        description: "An account with this email already exists.",
+        title: "Registration Error",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    const newUser: User = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      name: values.name,
-      email: values.email,
-      // Note: In a real app, password would be hashed and not stored directly
-      // For this localStorage example, we're omitting storing the password directly for simplicity
-      // but in a real scenario with localStorage, you would NOT store plaintext passwords.
-      // This example focuses on role and other details.
-      role: values.role,
-      avatar: `https://picsum.photos/seed/${values.email}/40/40`,
-      ...(values.role === UserRole.Engineer && { engineerLevel: values.engineerLevel }),
-    };
-    
-    addMockUser(newUser);
-
-    toast({
-      title: "Registration Successful!",
-      description: `User ${values.name} created as a ${values.role}${values.role === UserRole.Engineer ? ` (${values.engineerLevel})` : ''}. You can now log in.`,
-    });
-    setIsSubmitting(false);
-    router.push('/login');
   }
 
   return (
@@ -112,7 +116,7 @@ export function RegisterForm() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="John Doe" {...field} />
+                    <Input placeholder="John Doe" {...field} autoComplete="name"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -125,7 +129,7 @@ export function RegisterForm() {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="you@example.com" {...field} />
+                    <Input placeholder="you@example.com" {...field} type="email" autoComplete="email"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -138,7 +142,7 @@ export function RegisterForm() {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} autoComplete="new-password"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -151,7 +155,7 @@ export function RegisterForm() {
                 <FormItem>
                   <FormLabel>Confirm Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} autoComplete="new-password"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

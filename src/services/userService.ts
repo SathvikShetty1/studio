@@ -1,4 +1,3 @@
-
 // src/lib/mock-data.ts
 // This file is now deprecated for runtime data management.
 // MongoDB Atlas is the source of truth.
