@@ -43,6 +43,8 @@ import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { format } from "date-fns";
+import { deleteMockComplaint, updateMockComplaint } from "@/lib/mock-data";
+
 
 interface ComplaintTableAdminProps {
   complaints: Complaint[];
@@ -54,8 +56,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
-    // Default visibility state for columns if needed
-    // e.g., "resolutionTimeline": false,
+    resolutionTimeline: false, // Initially hide resolution timeline
   });
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
@@ -67,24 +68,18 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (complaintId: string) => {
-    // Call the API to delete the complaint
-    try {
-      const response = await fetch(`/api/complaints/${complaintId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
-        onDeleteComplaint(complaintId); // Callback to update parent state
-      } else {
-        const errorData = await response.json();
-        toast({ title: "Deletion Failed", description: errorData.message || "Could not delete complaint.", variant: "destructive" });
-      }
-    } catch (error) {
-      console.error("Error deleting complaint:", error);
-      toast({ title: "Network Error", description: "Failed to connect to server for deletion.", variant: "destructive" });
-    }
+  const handleDelete = (complaintId: string) => {
+    deleteMockComplaint(complaintId);
+    onDeleteComplaint(complaintId); // Callback to update parent state
+    toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
   };
+  
+  const handleUpdateInTable = (updatedComplaint: Complaint) => {
+    updateMockComplaint(updatedComplaint.id, updatedComplaint);
+    onUpdateComplaint(updatedComplaint); // This should trigger a re-fetch or state update in parent
+    // Toast is handled by the modal
+  };
+
 
   const columns: ColumnDef<Complaint>[] = [
     {
@@ -120,6 +115,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
           Customer
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -162,6 +158,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
           Submitted
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -175,10 +172,11 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
-          <CalendarClock className="mr-2 h-4 w-4" />
+          <CalendarClock className="mr-2 h-4 w-4 flex-shrink-0" />
           Resolution Due
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
         </Button>
       ),
       cell: ({ row }) => {
@@ -346,6 +344,8 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
                 else if (columnId === 'assignedToName') displayName = 'Assigned To';
                 else if (columnId === 'submittedAt') displayName = 'Submitted';
                 else if (columnId === 'resolutionTimeline') displayName = 'Resolution Due';
+                else displayName = columnId.charAt(0).toUpperCase() + columnId.slice(1);
+
 
                 return (
                   <DropdownMenuCheckboxItem
@@ -445,12 +445,9 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
             setIsModalOpen(false);
             setSelectedComplaint(null);
           }}
-          onUpdateComplaint={onUpdateComplaint}
+          onUpdateComplaint={handleUpdateInTable}
         />
       )}
     </div>
   );
 }
-
-
-    

@@ -50,7 +50,9 @@ interface ComplaintTableEngineerProps {
 export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: ComplaintTableEngineerProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+    resolutionTimeline: false, // Initially hide resolution timeline
+  });
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -94,6 +96,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
           Customer
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -131,6 +134,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
           Submitted
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -144,10 +148,11 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-start w-full"
         >
-          <CalendarClock className="mr-2 h-4 w-4" />
+          <CalendarClock className="mr-2 h-4 w-4 flex-shrink-0" />
           Resolution Due
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
         </Button>
       ),
       cell: ({ row }) => {
@@ -245,7 +250,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
              {(table.getColumn("status")?.getFilterValue() as string[])?.length > 0 && (
                 <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => table.getColumn("status")?.setFilterValue([])} className="text-xs text-destructive">Clear Status Filter</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => table.getColumn("status")?.setFilterValue([])} className="text-xs text-destructive focus:!text-destructive hover:!bg-destructive/10">Clear Status Filter</DropdownMenuItem>
                 </>
             )}
               <DropdownMenuLabel className="pt-2">Filter by Priority</DropdownMenuLabel>
@@ -270,7 +275,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
             {(table.getColumn("priority")?.getFilterValue() as string[])?.length > 0 && (
                  <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => table.getColumn("priority")?.setFilterValue([])} className="text-xs text-destructive">Clear Priority Filter</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => table.getColumn("priority")?.setFilterValue([])} className="text-xs text-destructive focus:!text-destructive hover:!bg-destructive/10">Clear Priority Filter</DropdownMenuItem>
                 </>
             )}
           </DropdownMenuContent>
@@ -286,6 +291,13 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
               .getAllColumns()
               .filter((column) => column.getCanHide())
               .map((column) => {
+                const columnId = column.id;
+                let displayName = columnId;
+                 if (columnId === 'customerName') displayName = 'Customer';
+                else if (columnId === 'submittedAt') displayName = 'Submitted';
+                else if (columnId === 'resolutionTimeline') displayName = 'Resolution Due';
+                else displayName = columnId.charAt(0).toUpperCase() + columnId.slice(1);
+
                 return (
                   <DropdownMenuCheckboxItem
                     key={column.id}
@@ -295,9 +307,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {column.id === 'customerName' ? 'Customer' : 
-                     column.id === 'submittedAt' ? 'Submitted' : 
-                     column.id === 'resolutionTimeline' ? 'Resolution Due' : column.id}
+                    {displayName}
                   </DropdownMenuCheckboxItem>
                 );
               })}
