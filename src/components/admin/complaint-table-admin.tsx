@@ -43,7 +43,7 @@ import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { format } from "date-fns";
-import { deleteMockComplaint, updateMockComplaint } from "@/lib/mock-data"; // Assuming these will be replaced by API calls
+import { deleteMockComplaint, updateMockComplaint } from "@/lib/mock-data";
 
 
 interface ComplaintTableAdminProps {
@@ -67,21 +67,17 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
   };
 
   const handleDelete = async (complaintId: string) => {
-    try {
-      const response = await fetch(`/api/complaints/${complaintId}`, { method: 'DELETE' });
-      if (response.ok) {
-        onDeleteComplaint(complaintId);
-        toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
-      } else {
-        const errorData = await response.json();
-        toast({ title: "Deletion Failed", description: errorData.message || "Could not delete complaint.", variant: "destructive" });
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "A network error occurred during deletion.", variant: "destructive" });
+    const success = deleteMockComplaint(complaintId);
+    if (success) {
+      onDeleteComplaint(complaintId);
+      toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
+    } else {
+      toast({ title: "Deletion Failed", description: "Could not delete complaint.", variant: "destructive" });
     }
   };
   
   const handleUpdateInTable = (updatedComplaint: Complaint) => {
+    updateMockComplaint(updatedComplaint.id, updatedComplaint);
     onUpdateComplaint(updatedComplaint); 
   };
 
@@ -120,7 +116,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start w-full px-0 hover:bg-transparent"
         >
           Customer
           <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
@@ -163,7 +159,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start w-full px-0 hover:bg-transparent"
         >
           Submitted
           <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
@@ -177,7 +173,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start w-full px-0 hover:bg-transparent"
         >
           <CalendarClock className="mr-2 h-4 w-4 flex-shrink-0" />
           Resolution Due
@@ -456,6 +452,8 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     </div>
   );
 }
+    
+
     
 
     
