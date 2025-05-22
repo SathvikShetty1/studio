@@ -37,13 +37,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Complaint, ComplaintPriority } from "@/types"; 
+import type { Complaint, ComplaintPriority as ComplaintPriorityType } from "@/types"; 
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types";
 import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { format } from "date-fns";
-import { deleteMockComplaint, updateMockComplaint } from "@/lib/mock-data";
+import { deleteMockComplaint, updateMockComplaint } from "@/lib/mock-data"; // Assuming these will be replaced by API calls
 
 
 interface ComplaintTableAdminProps {
@@ -55,7 +55,7 @@ interface ComplaintTableAdminProps {
 export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteComplaint }: ComplaintTableAdminProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({}); // Removed resolutionTimeline: false
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -66,20 +66,23 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     setIsModalOpen(true);
   };
 
-  const handleDelete = (complaintId: string) => {
-    // This should call an API in a real app
-    // For localStorage demo:
-    deleteMockComplaint(complaintId);
-    onDeleteComplaint(complaintId); // Callback to update parent state
-    toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
+  const handleDelete = async (complaintId: string) => {
+    try {
+      const response = await fetch(`/api/complaints/${complaintId}`, { method: 'DELETE' });
+      if (response.ok) {
+        onDeleteComplaint(complaintId);
+        toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
+      } else {
+        const errorData = await response.json();
+        toast({ title: "Deletion Failed", description: errorData.message || "Could not delete complaint.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "A network error occurred during deletion.", variant: "destructive" });
+    }
   };
   
   const handleUpdateInTable = (updatedComplaint: Complaint) => {
-     // This should call an API in a real app
-    // For localStorage demo:
-    updateMockComplaint(updatedComplaint.id, updatedComplaint);
-    onUpdateComplaint(updatedComplaint); // This should trigger a re-fetch or state update in parent
-    // Toast is handled by the modal
+    onUpdateComplaint(updatedComplaint); 
   };
 
 
@@ -142,7 +145,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
       accessorKey: "priority",
       header: "Priority",
       cell: ({ row }) => {
-        const priority = row.getValue("priority") as ComplaintPriority | undefined;
+        const priority = row.getValue("priority") as ComplaintPriorityType | undefined;
         return priority ? <Badge variant={priority === ComplaintPriorityEnum.Escalated || priority === ComplaintPriorityEnum.High ? "destructive" : "secondary"}>{priority}</Badge> : <Badge variant="outline">N/A</Badge>;
       },
       filterFn: (row, id, value) => {
@@ -453,5 +456,6 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     </div>
   );
 }
+    
 
     
