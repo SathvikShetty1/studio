@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,7 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Filter } from "lucide-react";
+import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Filter, CalendarClock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,8 +37,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Complaint, ComplaintPriority } from "@/types"; 
-import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types"; 
+import type { Complaint, ComplaintPriority } from "@/types";
+import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types";
 import { ComplaintDetailsModalEngineer } from "./complaint-details-modal-engineer";
 import { format } from "date-fns";
 
@@ -136,6 +137,23 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         </Button>
       ),
       cell: ({ row }) => format(new Date(row.getValue("submittedAt")), "PP"),
+    },
+    {
+      accessorKey: "resolutionTimeline",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          <CalendarClock className="mr-2 h-4 w-4" />
+          Resolution Due
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const resolutionTimeline = row.getValue("resolutionTimeline") as string | undefined;
+        return resolutionTimeline ? format(new Date(resolutionTimeline), "PP") : <span className="text-muted-foreground">N/A</span>;
+      },
     },
     {
       id: "actions",
@@ -277,7 +295,9 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {column.id === 'customerName' ? 'Customer' : column.id === 'submittedAt' ? 'Submitted' : column.id}
+                    {column.id === 'customerName' ? 'Customer' : 
+                     column.id === 'submittedAt' ? 'Submitted' : 
+                     column.id === 'resolutionTimeline' ? 'Resolution Due' : column.id}
                   </DropdownMenuCheckboxItem>
                 );
               })}
@@ -372,4 +392,3 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
     </div>
   );
 }
-

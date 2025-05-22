@@ -16,10 +16,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-// ScrollArea removed for direct CSS scroll
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { Paperclip } from 'lucide-react';
+import { Paperclip, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from '@/hooks/use-auth';
@@ -28,13 +27,13 @@ interface ComplaintDetailsModalEngineerProps {
   complaint: Complaint | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateComplaint: (updatedComplaint: Complaint) => void; // Callback after successful API update
+  onUpdateComplaint: (updatedComplaint: Complaint) => void;
 }
 
 const engineerAllowedStatuses: ComplaintStatus[] = [
   ComplaintStatus.InProgress,
   ComplaintStatus.Resolved,
-  ComplaintStatus.Unresolved, 
+  ComplaintStatus.Unresolved,
 ];
 
 export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUpdateComplaint }: ComplaintDetailsModalEngineerProps) {
@@ -49,7 +48,7 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     if (complaint) {
       setSelectedStatus(complaint.status);
       setResolutionDetails(complaint.resolutionDetails || '');
-      setInternalNote(''); 
+      setInternalNote('');
     }
   }, [complaint]);
 
@@ -61,9 +60,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     }
     setIsSubmitting(true);
 
-    let updatedResolvedAt: Date | string | undefined = complaint.resolvedAt; // Keep as Date object for API
+    let updatedResolvedAt: Date | string | undefined = complaint.resolvedAt;
     if (selectedStatus === ComplaintStatus.Resolved && complaint.status !== ComplaintStatus.Resolved) {
-      updatedResolvedAt = new Date(); // Set as Date object
+      updatedResolvedAt = new Date();
     } else if (selectedStatus !== ComplaintStatus.Resolved) {
       updatedResolvedAt = undefined;
     }
@@ -71,8 +70,8 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     const newInternalNotes = complaint.internalNotes ? [...complaint.internalNotes] : [];
     if (internalNote.trim()) {
         newInternalNotes.push({
-            id: `note-frontend-${Date.now()}`, // temp frontend id
-            userId: engineerUser.id, // MongoDB _id string
+            id: `note-mongo-${Date.now()}`, // Placeholder, MongoDB will generate _id
+            userId: engineerUser.id,
             userName: engineerUser.name,
             text: internalNote,
             timestamp: new Date(),
@@ -82,8 +81,8 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
 
     const updatePayload = {
       status: selectedStatus || complaint.status,
-      resolutionDetails: resolutionDetails, 
-      resolvedAt: updatedResolvedAt ? new Date(updatedResolvedAt).toISOString() : undefined, // Convert to ISO string for API
+      resolutionDetails: resolutionDetails,
+      resolvedAt: updatedResolvedAt ? new Date(updatedResolvedAt).toISOString() : undefined,
       internalNotes: newInternalNotes.map(note => ({
           userId: note.userId,
           userName: note.userName,
@@ -91,8 +90,6 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
           timestamp: note.timestamp,
           isInternal: note.isInternal,
       })),
-      // assignedTo, assignedToName, currentHandlerLevel should not be changed by engineer here
-      // they are set by admin.
     };
 
     try {
@@ -119,13 +116,13 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
     }
   };
   
-  if (!isOpen || !complaint) return null; // Keep this check
+  if (!isOpen || !complaint) return null;
 
   const isTerminalStatusForEngineer = [
-      ComplaintStatus.Closed, 
-      ComplaintStatus.Escalated, // If escalated, admin should re-assign
-      ComplaintStatus.PendingAssignment, // Should be assigned by admin
-      ComplaintStatus.Submitted // Initial state, needs admin action
+      ComplaintStatus.Closed,
+      ComplaintStatus.Escalated,
+      ComplaintStatus.PendingAssignment,
+      ComplaintStatus.Submitted
     ].includes(complaint.status);
 
 
@@ -139,16 +136,22 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 overflow-y-auto p-6"> {/* This div will handle scrolling */}
+        <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-lg">Complaint Information</CardTitle></CardHeader>
-                <CardContent className="space-y-2 text-sm">
+                <CardContent className="space-y-3 text-sm">
                   <p><strong>Customer:</strong> {complaint.customerName}</p>
                   <p><strong>Category:</strong> {complaint.category}</p>
                   <p><strong>Submitted:</strong> {format(new Date(complaint.submittedAt), "PPpp")}</p>
                   <div className="flex items-center"><strong>Priority:</strong>&nbsp;<Badge variant={complaint.priority === ComplaintPriorityEnum.High || complaint.priority === ComplaintPriorityEnum.Escalated ? "destructive" : "secondary"} className="ml-1">{complaint.priority || "N/A"}</Badge></div>
+                  {complaint.resolutionTimeline && (
+                    <p className="flex items-center">
+                      <CalendarClock className="mr-2 h-4 w-4 text-primary" />
+                      <strong>Resolution Due:</strong>&nbsp;{format(new Date(complaint.resolutionTimeline), "PP")}
+                    </p>
+                  )}
                   <div>
                     <strong>Description:</strong>
                     <p className="mt-1 p-2 bg-secondary rounded-md whitespace-pre-wrap">{complaint.description}</p>
@@ -158,14 +161,13 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                       <strong>Attachments:</strong>
                       <ul className="list-disc list-inside mt-1 space-y-1">
                         {complaint.attachments.map(att => (
-                          <li key={att.id} className="text-primary hover:underline text-xs">
+                          <li key={att.id || att.fileName} className="text-primary hover:underline text-xs">
                             <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
                               <Paperclip className="h-3 w-3 mr-1.5 inline-block flex-shrink-0" /> {att.fileName}
                             </a>
                           </li>
                         ))}
                       </ul>
-                       <p className="text-xs text-muted-foreground mt-1">Attachment URL Length (example first attachment): {complaint.attachments[0]?.url?.length}</p>
                     </div>
                   )}
                 </CardContent>
@@ -173,9 +175,9 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                {complaint.internalNotes && complaint.internalNotes.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-md">Internal Notes History</CardTitle></CardHeader>
-                  <CardContent className="space-y-2 text-xs p-4"> {/* Removed max-h for full display */}
+                  <CardContent className="space-y-2 text-xs p-4">
                     {complaint.internalNotes.slice().reverse().map(note => (
-                      <div key={note.id || `note-${note.timestamp.getTime()}`} className="p-2 bg-secondary rounded">
+                      <div key={note.id || `note-${new Date(note.timestamp).getTime()}`} className="p-2 bg-secondary rounded">
                         <p className="font-semibold">{note.userName} <span className="font-normal text-muted-foreground">({format(new Date(note.timestamp), "PP p")})</span>:</p>
                         <p className="whitespace-pre-wrap">{note.text}</p>
                       </div>
@@ -191,16 +193,15 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                 <CardContent className="space-y-4">
                    <div>
                     <Label htmlFor="status">Update Status</Label>
-                    <Select 
-                        value={selectedStatus} 
-                        disabled={isTerminalStatusForEngineer} 
+                    <Select
+                        value={selectedStatus}
+                        disabled={isTerminalStatusForEngineer}
                         onValueChange={(value) => setSelectedStatus(value as ComplaintStatus)}
                     >
                       <SelectTrigger id="status">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Show current status if it's one engineers cannot normally set, but it's already set */}
                         {complaint.status && !engineerAllowedStatuses.includes(complaint.status) && (
                              <SelectItem value={complaint.status} disabled>{complaint.status} (Current)</SelectItem>
                         )}
@@ -216,8 +217,8 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                     <Textarea
                       id="resolution-details"
                       placeholder={
-                        selectedStatus === ComplaintStatus.Unresolved 
-                        ? "Explain why this complaint cannot be resolved at this level or what is needed..." 
+                        selectedStatus === ComplaintStatus.Unresolved
+                        ? "Explain why this complaint cannot be resolved at this level or what is needed..."
                         : "Enter details about the resolution or progress..."
                       }
                       value={resolutionDetails}
@@ -234,7 +235,6 @@ export function ComplaintDetailsModalEngineer({ complaint, isOpen, onClose, onUp
                       value={internalNote}
                       onChange={(e) => setInternalNote(e.target.value)}
                       rows={3}
-                      // Engineers can always add internal notes, unless complaint is fully closed by admin maybe
                     />
                   </div>
                 </CardContent>
