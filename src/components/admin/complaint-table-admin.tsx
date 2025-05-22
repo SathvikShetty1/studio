@@ -66,19 +66,15 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (complaintId: string) => {
-    const success = deleteMockComplaint(complaintId);
-    if (success) {
-      onDeleteComplaint(complaintId);
-      toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
-    } else {
-      toast({ title: "Deletion Failed", description: "Could not delete complaint.", variant: "destructive" });
-    }
+  const handleDelete = (complaintId: string) => {
+    deleteMockComplaint(complaintId); // Assuming this updates localStorage
+    onDeleteComplaint(complaintId); // This updates parent state to re-render
+    toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
   };
   
   const handleUpdateInTable = (updatedComplaint: Complaint) => {
-    updateMockComplaint(updatedComplaint.id, updatedComplaint);
-    onUpdateComplaint(updatedComplaint); 
+    updateMockComplaint(updatedComplaint.id, updatedComplaint); // Assuming this updates localStorage
+    onUpdateComplaint(updatedComplaint); // This updates parent state to re-render
   };
 
 
@@ -116,7 +112,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full px-0 hover:bg-transparent"
+          className="justify-start px-0" // Key change: px-0
         >
           Customer
           <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
@@ -159,7 +155,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full px-0 hover:bg-transparent"
+          className="justify-start px-0" // Key change: px-0
         >
           Submitted
           <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
@@ -173,7 +169,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full px-0 hover:bg-transparent"
+          className="justify-start px-0" // Key change: px-0
         >
           <CalendarClock className="mr-2 h-4 w-4 flex-shrink-0" />
           Resolution Due
@@ -452,6 +448,8 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     </div>
   );
 }
+    
+
     
 
     

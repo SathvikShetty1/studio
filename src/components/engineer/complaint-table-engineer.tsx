@@ -50,9 +50,7 @@ interface ComplaintTableEngineerProps {
 export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: ComplaintTableEngineerProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
-    resolutionTimeline: false, // Initially hide resolution timeline
-  });
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -96,7 +94,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start px-0" // Key change: px-0
         >
           Customer
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -134,7 +132,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start px-0" // Key change: px-0
         >
           Submitted
           <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -148,7 +146,7 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="justify-start w-full"
+          className="justify-start px-0" // Key change: px-0
         >
           <CalendarClock className="mr-2 h-4 w-4 flex-shrink-0" />
           Resolution Due
@@ -402,3 +400,6 @@ export function ComplaintTableEngineer({ complaints, onUpdateComplaint }: Compla
     </div>
   );
 }
+
+
+    
