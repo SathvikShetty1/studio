@@ -55,9 +55,7 @@ interface ComplaintTableAdminProps {
 export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteComplaint }: ComplaintTableAdminProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
-    resolutionTimeline: false, // Initially hide resolution timeline
-  });
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({}); // Removed resolutionTimeline: false
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -69,12 +67,16 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
   };
 
   const handleDelete = (complaintId: string) => {
+    // This should call an API in a real app
+    // For localStorage demo:
     deleteMockComplaint(complaintId);
     onDeleteComplaint(complaintId); // Callback to update parent state
     toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
   };
   
   const handleUpdateInTable = (updatedComplaint: Complaint) => {
+     // This should call an API in a real app
+    // For localStorage demo:
     updateMockComplaint(updatedComplaint.id, updatedComplaint);
     onUpdateComplaint(updatedComplaint); // This should trigger a re-fetch or state update in parent
     // Toast is handled by the modal
@@ -118,7 +120,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
           className="justify-start w-full"
         >
           Customer
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
         </Button>
       ),
       cell: ({ row }) => <div>{row.getValue("customerName")}</div>,
@@ -161,7 +163,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
           className="justify-start w-full"
         >
           Submitted
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4 flex-shrink-0" />
         </Button>
       ),
       cell: ({ row }) => format(new Date(row.getValue("submittedAt")), "PP"),
@@ -451,3 +453,5 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     </div>
   );
 }
+
+    
