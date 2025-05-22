@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,7 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Trash2, Filter } from "lucide-react";
+import { ArrowUpDown, ChevronDown, MoreHorizontal, Eye, Trash2, Filter, CalendarClock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +41,7 @@ import type { Complaint, ComplaintPriority } from "@/types";
 import { ComplaintStatus, ComplaintPriority as ComplaintPriorityEnum } from "@/types";
 import { ComplaintDetailsModalAdmin } from "./complaint-details-modal-admin";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from '@/hooks/use-toast';
 import { format } from "date-fns";
 
 interface ComplaintTableAdminProps {
@@ -52,7 +53,10 @@ interface ComplaintTableAdminProps {
 export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteComplaint }: ComplaintTableAdminProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({
+    // Default visibility state for columns if needed
+    // e.g., "resolutionTimeline": false,
+  });
   const [rowSelection, setRowSelection] = React.useState({});
   const [selectedComplaint, setSelectedComplaint] = React.useState<Complaint | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -63,9 +67,23 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
     setIsModalOpen(true);
   };
 
-  const handleDelete = (complaintId: string) => {
-    onDeleteComplaint(complaintId);
-    toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
+  const handleDelete = async (complaintId: string) => {
+    // Call the API to delete the complaint
+    try {
+      const response = await fetch(`/api/complaints/${complaintId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        toast({ title: "Complaint Deleted", description: `Complaint #${complaintId.slice(-6)} has been removed.` });
+        onDeleteComplaint(complaintId); // Callback to update parent state
+      } else {
+        const errorData = await response.json();
+        toast({ title: "Deletion Failed", description: errorData.message || "Could not delete complaint.", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Error deleting complaint:", error);
+      toast({ title: "Network Error", description: "Failed to connect to server for deletion.", variant: "destructive" });
+    }
   };
 
   const columns: ColumnDef<Complaint>[] = [
@@ -150,6 +168,23 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
         </Button>
       ),
       cell: ({ row }) => format(new Date(row.getValue("submittedAt")), "PP"),
+    },
+    {
+      accessorKey: "resolutionTimeline",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          <CalendarClock className="mr-2 h-4 w-4" />
+          Resolution Due
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const resolutionTimeline = row.getValue("resolutionTimeline") as string | undefined;
+        return resolutionTimeline ? format(new Date(resolutionTimeline), "PP") : <span className="text-muted-foreground">N/A</span>;
+      },
     },
     {
       id: "actions",
@@ -264,7 +299,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
              {(table.getColumn("status")?.getFilterValue() as string[])?.length > 0 && (
                 <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => table.getColumn("status")?.setFilterValue([])} className="text-xs text-destructive">Clear Status Filter</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => table.getColumn("status")?.setFilterValue([])} className="text-xs text-destructive focus:!text-destructive hover:!bg-destructive/10">Clear Status Filter</DropdownMenuItem>
                 </>
             )}
             <DropdownMenuLabel className="pt-2">Filter by Priority</DropdownMenuLabel>
@@ -289,7 +324,7 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
             {(table.getColumn("priority")?.getFilterValue() as string[])?.length > 0 && (
                  <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => table.getColumn("priority")?.setFilterValue([])} className="text-xs text-destructive">Clear Priority Filter</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => table.getColumn("priority")?.setFilterValue([])} className="text-xs text-destructive focus:!text-destructive hover:!bg-destructive/10">Clear Priority Filter</DropdownMenuItem>
                 </>
             )}
           </DropdownMenuContent>
@@ -305,16 +340,23 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
               .getAllColumns()
               .filter((column) => column.getCanHide())
               .map((column) => {
+                const columnId = column.id;
+                let displayName = columnId;
+                if (columnId === 'customerName') displayName = 'Customer';
+                else if (columnId === 'assignedToName') displayName = 'Assigned To';
+                else if (columnId === 'submittedAt') displayName = 'Submitted';
+                else if (columnId === 'resolutionTimeline') displayName = 'Resolution Due';
+
                 return (
                   <DropdownMenuCheckboxItem
-                    key={column.id}
+                    key={columnId}
                     className="capitalize"
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) =>
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {column.id === 'customerName' ? 'Customer' : column.id === 'assignedToName' ? 'Assigned To' : column.id === 'submittedAt' ? 'Submitted' : column.id}
+                    {displayName}
                   </DropdownMenuCheckboxItem>
                 );
               })}
@@ -410,3 +452,5 @@ export function ComplaintTableAdmin({ complaints, onUpdateComplaint, onDeleteCom
   );
 }
 
+
+    
